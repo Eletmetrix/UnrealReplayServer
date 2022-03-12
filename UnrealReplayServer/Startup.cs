@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnrealReplayServer.Databases;
+using UnrealReplayServer.Connectors;
 
 namespace UnrealReplayServer
 {
@@ -34,8 +35,9 @@ namespace UnrealReplayServer
             {
                 options.OutputFormatters.Insert(0, new BinaryOutputFormatter());
             });
-            services.AddSingleton<ISessionDatabase>(new SessionDatabase());
-            services.AddSingleton<IEventDatabase>(new EventDatabase());
+            services.Configure<ConnectionStrings>(Configuration.GetSection("ConnectionStrings"));
+            services.AddSingleton<ISessionDatabase, SessionDatabase>();
+            services.AddSingleton<IEventDatabase, EventDatabase>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
