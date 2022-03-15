@@ -3,24 +3,36 @@ The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
 
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using UnrealReplayServer.Connectors;
 using UnrealReplayServer.Databases.Models;
 
 namespace UnrealReplayServer.Databases
 {
     public class SessionDatabase : ISessionDatabase
     {
-        private Dictionary<string, Session> SessionList = new Dictionary<string, Session>();
+        public readonly ConnectionStrings _connectionStrings;
+
+        public SessionDatabase(IOptions<ConnectionStrings> connectionString)
+        {
+            _connectionStrings = connectionString.Value;
+        }
 
         public async Task<string> CreateSession(string setSessionName, string setAppVersion, string setNetVersion, int? setChangelist,
             string setPlatformFriendlyName)
         {
-            if (SessionList.ContainsKey(setSessionName))
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values = await SessionList.Find(x => x.SessionName == setSessionName).ToListAsync();
+            if (values.Count() > 0)
             {
-                SessionList.Remove(setSessionName);
+                await SessionList.DeleteOneAsync(x => x.SessionName == setSessionName);
             }
 
             Session newSession = new Session()
@@ -32,33 +44,45 @@ namespace UnrealReplayServer.Databases
                 SessionName = setSessionName,
                 IsLive = true
             };
-            SessionList.Add(newSession.SessionName, newSession);
+            await SessionList.InsertOneAsync(newSession);
             return newSession.SessionName;
         }
 
         public async Task<Session> GetSessionByName(string sessionName)
         {
-            if (SessionList.ContainsKey(sessionName))
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count() > 0)
             {
-                return SessionList[sessionName];
+                return values.Find(x => x.SessionName == sessionName);
             }
             return null;
         }
 
         public async Task<SessionFile> GetSessionHeader(string sessionName)
         {
-            if (SessionList.ContainsKey(sessionName))
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count() > 0)
             {
-                return SessionList[sessionName].HeaderFile;
+                return values.Find(x => x.SessionName == sessionName).HeaderFile;
             }
             return null;
         }
 
         public async Task<SessionFile> GetSessionChunk(string sessionName, int chunkIndex)
         {
-            if (SessionList.ContainsKey(sessionName))
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count() > 0)
             {
-                var session = SessionList[sessionName];
+                var session = values.Find(x => x.SessionName == sessionName);
                 if (chunkIndex >= 0 && chunkIndex < session.SessionFiles.Count)
                 {
                     return session.SessionFiles[chunkIndex];
@@ -69,71 +93,87 @@ namespace UnrealReplayServer.Databases
 
         public async Task<bool> SetUsers(string sessionName, string[] users)
         {
-            if (SessionList.ContainsKey(sessionName) == false)
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values =  await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count() == 0)
             {
                 LogError($"Session {sessionName} not found");
                 return false;
             }
 
-            var session = SessionList[sessionName];
-            session.Users = users;
+            var update = Builders<Session>.Update.Set(x => x.Users, users);
+            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
 
             return true;
         }
 
         public async Task<bool> SetHeader(string sessionName, SessionFile sessionFile, int streamChunkIndex, int totalDemoTimeMs)
         {
-            if (SessionList.ContainsKey(sessionName) == false)
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count() == 0)
             {
                 LogError($"Session {sessionName} not found");
                 return false;
             }
 
-            var session = SessionList[sessionName];
-            session.HeaderFile = sessionFile;
-            session.TotalDemoTimeMs = totalDemoTimeMs;
+            var update = Builders<Session>.Update.Set(x => x.HeaderFile, sessionFile)
+                                                 .Set(x => x.TotalDemoTimeMs, totalDemoTimeMs);
+            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
 
-            Log($"[HEADER] Stats for {sessionName}: TotalDemoTimeMs={session.TotalDemoTimeMs}");
+            Log($"[HEADER] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}");
 
             return true;
         }
 
         public async Task<bool> AddChunk(string sessionName, SessionFile sessionFile, int totalDemoTimeMs, int totalChunks, int totalBytes)
         {
-            if (SessionList.ContainsKey(sessionName) == false)
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count() == 0)
             {
                 LogError($"Session {sessionName} not found");
                 return false;
             }
 
-            var session = SessionList[sessionName];
-            session.TotalDemoTimeMs = totalDemoTimeMs;
-            session.TotalChunks = totalChunks;
-            session.TotalUploadedBytes = totalBytes;
-            session.SessionFiles.Add(sessionFile);
+            var update = Builders<Session>.Update.Set(x => x.TotalDemoTimeMs, totalDemoTimeMs)
+                                                 .Set(x => x.TotalChunks, totalChunks)
+                                                 .Set(x => x.TotalUploadedBytes, totalBytes)
+                                                 .Push(x => x.SessionFiles, sessionFile);
+            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
 
-            Log($"[CHUNK] Stats for {sessionName}: TotalDemoTimeMs={session.TotalDemoTimeMs}, TotalChunks={session.TotalChunks}, " +
-                $"TotalUploadedBytes={session.TotalUploadedBytes}");
+            Log($"[CHUNK] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}, TotalChunks={totalChunks}, " +
+                $"TotalUploadedBytes={totalBytes}");
 
             return true;
         }
 
         public async Task StopSession(string sessionName, int totalDemoTimeMs, int totalChunks, int totalBytes)
         {
-            if (SessionList.ContainsKey(sessionName) == false)
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count() == 0)
             {
                 LogError($"Session {sessionName} not found");
                 return;
             }
 
-            var session = SessionList[sessionName];
-            session.IsLive = false;
-            session.TotalDemoTimeMs = totalDemoTimeMs;
-            session.TotalChunks = totalChunks;
-            session.TotalUploadedBytes = totalBytes;
+            var update = Builders<Session>.Update.Set(x => x.IsLive, false)
+                                                 .Set(x => x.TotalDemoTimeMs, totalDemoTimeMs)
+                                                 .Set(x => x.TotalChunks, totalChunks)
+                                                 .Set(x => x.TotalUploadedBytes, totalBytes);
+            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
 
-            Log($"[END] Stats for {sessionName}: TotalDemoTimeMs={session.TotalDemoTimeMs}, TotalChunks={session.TotalChunks}, " +
-                $"TotalUploadedBytes={session.TotalUploadedBytes}");
+            Log($"[END] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}, TotalChunks={totalChunks}, " +
+                $"TotalUploadedBytes={totalBytes}");
         }
 
         public async Task<Session[]> FindReplaysByGroup(string group, IEventDatabase eventDatabase)
@@ -141,20 +181,18 @@ namespace UnrealReplayServer.Databases
             return await Task.Run(async () =>
             {
                 var sessionNames = await eventDatabase.FindSessionNamesByGroup(group);
-                if (sessionNames == null ||
-                    sessionNames.Length == 0)
-                {
+                if (sessionNames == null || sessionNames.Length == 0)
                     return Array.Empty<Session>();
-                }
 
                 List<Session> sessions = new List<Session>();
+                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+                var database = client.GetDatabase("replayserver");
+                var SessionList = database.GetCollection<Session>("SessionList");
 
                 for (int i = 0; i < sessionNames.Length; i++)
                 {
-                    if (SessionList.ContainsKey(sessionNames[i]))
-                    {
-                        sessions.Add(SessionList[sessionNames[i]]);
-                    }
+                    var values = await SessionList.Find(x => x.SessionName == sessionNames[i]).ToListAsync();
+                    sessions.AddRange(values.FindAll(x => x.SessionName == sessionNames[i]));
                 }
 
                 return sessions.ToArray();
@@ -163,47 +201,36 @@ namespace UnrealReplayServer.Databases
 
         public async Task<Session[]> FindReplays(string app, int? cl, string version, string meta, string user, bool? recent)
         {
-            return await Task.Run(() =>
+            FilterDefinition<Session> pQuery = Builders<Session>.Filter.Empty;
+            if (app != null)
+                pQuery &= Builders<Session>.Filter.Eq(x => x.AppVersion, app);
+            if (cl != null)
+                pQuery &= Builders<Session>.Filter.Eq(x => x.Changelist, cl);
+            if (version != null)
+                pQuery &= Builders<Session>.Filter.Eq(x => x.NetVersion, version);
+            if (user != null)
+                pQuery &= Builders<Session>.Filter.AnyEq(x => x.Users, user);
+
+            return await Task.Run(async () =>
             {
-                List<Session> sessions = new List<Session>();
+                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+                var database = client.GetDatabase("replayserver");
+                var SessionList = database.GetCollection<Session>("SessionList");
 
-                var values = SessionList.Values;
-                foreach (var entry in values)
-                {
-                    bool shouldAdd = true;
-                    if (app != null)
-                    {
-                        shouldAdd &= entry.AppVersion == app;
-                    }
-                    if (cl != null)
-                    {
-                        shouldAdd &= entry.Changelist == cl;
-                    }
-                    if (version != null)
-                    {
-                        shouldAdd &= entry.NetVersion == version;
-                    }
-                    if (user != null)
-                    {
-                        shouldAdd &= entry.Users.Contains(user);
-                    }
+                var result = await SessionList.Find(pQuery).ToListAsync();
 
-                    if (shouldAdd)
-                    {
-                        sessions.Add(entry);
-                    }
-                }
-
-                return sessions.ToArray();
+                return result.ToArray();
             });
         }
 
         public async Task CheckViewerInactivity()
         {
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
-                var sessions = new Session[SessionList.Count];
-                SessionList.Values.CopyTo(sessions, 0);
+                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+                var database = client.GetDatabase("replayserver");
+                var SessionList = database.GetCollection<Session>("SessionList");
+                var sessions = (await SessionList.Find(x => true).ToListAsync()).ToArray();
 
                 for (int i = 0; i < sessions.Length; i++)
                 {

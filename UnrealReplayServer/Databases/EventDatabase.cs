@@ -7,19 +7,30 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MongoDB.Driver;
 using UnrealReplayServer.Databases.Models;
+using UnrealReplayServer.Connectors;
+using Microsoft.Extensions.Options;
 
 namespace UnrealReplayServer.Databases
 {
     public class EventDatabase : IEventDatabase
     {
-        private Dictionary<string, EventEntry> eventList = new Dictionary<string, EventEntry>();
-        private Dictionary<string, List<EventEntry>> eventListBySession = new Dictionary<string, List<EventEntry>>();
+        private readonly ConnectionStrings _connectionStrings;
+
+        public EventDatabase(IOptions<ConnectionStrings> connectionStrings)
+        {
+            _connectionStrings = connectionStrings.Value;
+        }
 
         public async Task AddEvent(string setSessionName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
         {
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
             string eventName = Guid.NewGuid().ToString("N");
-            var newEntry = new EventEntry()
+
+            var eventList = database.GetCollection<EventEntry>("EventList");
+            var newEntry = new EventEntry
             {
                 GroupName = group,
                 Meta = meta,
@@ -29,77 +40,74 @@ namespace UnrealReplayServer.Databases
                 Data = data,
                 EventId = eventName
             };
-
-            eventList.Add(eventName, newEntry);
-
-            if (eventListBySession.ContainsKey(setSessionName) == false)
-            {
-                eventListBySession.Add(setSessionName, new List<EventEntry>());
-            }
-
-            var list = eventListBySession[setSessionName];
-            list.Add(newEntry);
+            await eventList.InsertOneAsync(newEntry);
 
             Log("[EVENT ADD] Adding event: " + eventName);
         }
 
         public async Task UpdateEvent(string setSessionName, string eventName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
         {
-            if (eventList.ContainsKey(eventName) == false)
-            {
-                return;
-            }
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var eventList = database.GetCollection<EventEntry>("EventList");
+            var values = await eventList.Find(x => x.EventId == eventName).ToListAsync();
+            if (values.Count() == 0) return;
 
-            var entry = eventList[eventName];
-
-            entry.GroupName = group;
-            entry.Meta = meta;
-            entry.SessionName = setSessionName;
-            entry.Time1 = time1.Value;
-            entry.Time2 = time2.Value;
-            entry.Data = data;
+            var update = Builders<EventEntry>.Update.Set("GroupName", group)
+                                                    .Set("Meta", meta)
+                                                    .Set("SessionName", setSessionName)
+                                                    .Set("Time1", time1.Value)
+                                                    .Set("Time2", time2.Value)
+                                                    .Set("Data", data);
+            await eventList.UpdateOneAsync(r => r.EventId == eventName, update);
 
             Log("[EVENT UPDATE] Updating event: " + eventName);
         }
 
         public async Task<EventEntry[]> GetEventsByGroup(string sessionName, string groupName)
         {
-            if (eventListBySession.ContainsKey(sessionName) == false)
-            {
-                return Array.Empty<EventEntry>();
-            }
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var eventList = database.GetCollection<EventEntry>("EventList");
+            var values = await eventList.Find(x => x.SessionName == sessionName).ToListAsync();
+            if (values.Count == 0) return Array.Empty<EventEntry>();
 
             return await Task.Run(() =>
             {
-                var list = eventListBySession[sessionName];
-                var entries = (from ee in list where ee.GroupName == groupName select ee).ToArray();
+                var entries = (from ee in values where ee.GroupName == groupName select ee).ToArray();
                 return entries;
             });
         }
 
         public async Task<EventEntry> FindEventByName(string eventName)
         {
-            if (eventList.ContainsKey(eventName) == false)
-            {
-                return null;
-            }
+            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var eventList = database.GetCollection<EventEntry>("EventList");
+            var values = await eventList.Find(x => x.EventId == eventName).ToListAsync();
+            if (values.Count() == 0) return null;
 
-            return eventList[eventName];
+            return values.First();
         }
 
         public async Task<string[]> FindSessionNamesByGroup(string group)
         {
-            return await Task.Run(() =>
+            return await Task.Run(async () =>
             {
                 List<string> result = new List<string>();
 
-                foreach (var pair in eventList)
+                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
+                var database = client.GetDatabase("replayserver");
+                var eventList = database.GetCollection<EventEntry>("EventList");
+                var values = await eventList.Find(x => true).ToListAsync();
+
+                foreach (var pair in values)
                 {
-                    if (pair.Value.GroupName == group)
+                    if (pair.GroupName == group)
                     {
-                        if (result.Contains(pair.Value.SessionName) == false)
+                        if (result.Contains(pair.SessionName) == false)
                         {
-                            result.Add(pair.Value.SessionName);
+                            result.Add(pair.SessionName);
                         }
                     }
                 }

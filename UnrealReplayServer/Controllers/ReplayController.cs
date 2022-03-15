@@ -5,6 +5,7 @@ Copyright (c) 2021 Henning Thoele
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -208,15 +209,29 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            string viewerId = session.AddViewer(user);
+            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+            var filter = Builders<Session>.Filter.And(Builders<Session>.Filter.Eq(x => x.SessionName, sessionName), Builders<Session>.Filter.ElemMatch(x => x.Viewers, v => v.Username == user));
+            var update = Builders<Session>.Update.PullFilter(model => model.Viewers, v => v.Username == user);
+            await SessionList.UpdateOneAsync(filter, update);
+
+            _logger.LogInformation($"ReplayController.StartDownloading -- allright 1!");
+
+            var newViewer = new SessionViewer { Username = user, LastSeen = DateTimeOffset.UtcNow };
+            await SessionList.FindOneAndUpdateAsync(x => x.SessionName == sessionName, Builders<Session>.Update.Push(e => e.Viewers, newViewer));
+
+            _logger.LogInformation($"ReplayController.StartDownloading -- allright 2!");
 
             var resp = new StartDownloadingResponse()
             {
                 NumChunks = session.TotalChunks,
                 State = session.IsLive ? "Live" : string.Empty,
                 Time = session.TotalDemoTimeMs,
-                ViewerId = viewerId
+                ViewerId = user
             };
+
+            _logger.LogInformation($"ReplayController.StartDownloading -- allright 3!");
 
             return resp;
         }
@@ -233,7 +248,23 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            session.RefreshViewer(viewerName, final != null && final.Value == true);
+            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._connectionStrings.MongoDBConnection);
+            var database = client.GetDatabase("replayserver");
+            var SessionList = database.GetCollection<Session>("SessionList");
+
+            if (final != null && final.Value == true)
+            {
+                await SessionList.FindOneAndUpdateAsync(x => x.SessionName == sessionName, Builders<Session>.Update.PullFilter(p => p.Viewers, f => f.Username == viewerName));
+            }
+            else
+            {
+                // Update "last seen" timestamp
+                var filter = Builders<Session>.Filter.And(Builders<Session>.Filter.Eq(x => x.SessionName, sessionName), 
+                    Builders<Session>.Filter.ElemMatch(x => x.Viewers, v => v.Username == viewerName));
+                var update = Builders<Session>.Update.Set(model => model.Viewers[-1].LastSeen, DateTimeOffset.UtcNow);
+
+                await SessionList.UpdateOneAsync(filter, update);
+            }
 
             return null;
         }
@@ -337,6 +368,9 @@ namespace UnrealReplayServer.Controllers
         {
             var result = new SearchReplaysResponse();
 
+            _logger.LogInformation($"ReplayController.SearchReplays -- app: {app}, cl: {cl}, version: {version}, meta: {meta}" +
+                $", user: {user}, recent: {recent}");
+
             var replayList = await sessionDatabase.FindReplays(app, cl, version, meta, user, recent);
 
             result.Replays = new SearchReplaysResponse.SearchReplaysResponseEntry[replayList.Length];
@@ -357,6 +391,8 @@ namespace UnrealReplayServer.Controllers
                     shouldKeep = false,
                 };
             }
+
+            _logger.LogInformation($"ReplayController.SearchReplays -- {result.Replays.Length} Replay(s) found.");
 
             return result;
         }

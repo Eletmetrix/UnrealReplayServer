@@ -7,6 +7,6 @@ namespace UnrealReplayServer.Connectors
 {
     public class ConnectionStrings
     {
-        public string MySqlConnection { get; set; }
+        public string MongoDBConnection { get; set; }
     }
 }
