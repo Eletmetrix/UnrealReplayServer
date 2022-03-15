@@ -1,12 +1,6 @@
 # Unreal Engine HTTP Replay Server
 This is a sample implementation of an Unreal Engine 4 HTTP Replay Streaming Sample Server using ASP.NET 5
 
-> Important!   
-> This is in no way intended to be production ready. The current implementation uses in-memory storage 
-of replays, so all your precious replays will be gone when you restart the server.  
-> The code also currently doesn't use containers, databases, caching mechanisms and so on.  
-> You have been warned!
-
 ## What is HTTP Replay Streaming?
 Unreal Engine 4 allows you to record and play replays of your gaming sessions. There are various factories for this (in-memory of the Client, to file on Client, to SaveGame on Client) and the HTTP streaming server is one of them. This project implements such a 
 server, which allows users to record their playback to a server and let other people rewatch the same replay from their own
