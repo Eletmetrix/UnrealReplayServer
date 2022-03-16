@@ -18,17 +18,22 @@ namespace UnrealReplayServer.Databases
     {
         public readonly ConnectionStrings _connectionStrings;
 
+        private readonly MongoClient client;
+        private readonly IMongoDatabase database;
+        private readonly IMongoCollection SessionList;
+
         public SessionDatabase(IOptions<ConnectionStrings> connectionString)
         {
             _connectionStrings = connectionString.Value;
+
+            client = new MongoClient(_connectionStrings.MongoDBConnection);
+            database = client.GetDatabase("replayserver");
+            SessionList = database.GetCollection<Session>("SessionList");
         }
 
         public async Task<string> CreateSession(string setSessionName, string setAppVersion, string setNetVersion, int? setChangelist,
             string setPlatformFriendlyName)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values = await SessionList.Find(x => x.SessionName == setSessionName).ToListAsync();
             if (values.Count() > 0)
             {
@@ -50,9 +55,6 @@ namespace UnrealReplayServer.Databases
 
         public async Task<Session> GetSessionByName(string sessionName)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
             if (values.Count() > 0)
             {
@@ -63,9 +65,6 @@ namespace UnrealReplayServer.Databases
 
         public async Task<SessionFile> GetSessionHeader(string sessionName)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
             if (values.Count() > 0)
             {
@@ -76,9 +75,6 @@ namespace UnrealReplayServer.Databases
 
         public async Task<SessionFile> GetSessionChunk(string sessionName, int chunkIndex)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
             if (values.Count() > 0)
             {
@@ -93,9 +89,6 @@ namespace UnrealReplayServer.Databases
 
         public async Task<bool> SetUsers(string sessionName, string[] users)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values =  await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
             if (values.Count() == 0)
             {
@@ -111,9 +104,6 @@ namespace UnrealReplayServer.Databases
 
         public async Task<bool> SetHeader(string sessionName, SessionFile sessionFile, int streamChunkIndex, int totalDemoTimeMs)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
             if (values.Count() == 0)
             {
@@ -132,9 +122,6 @@ namespace UnrealReplayServer.Databases
 
         public async Task<bool> AddChunk(string sessionName, SessionFile sessionFile, int totalDemoTimeMs, int totalChunks, int totalBytes)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
             if (values.Count() == 0)
             {
@@ -156,9 +143,6 @@ namespace UnrealReplayServer.Databases
 
         public async Task StopSession(string sessionName, int totalDemoTimeMs, int totalChunks, int totalBytes)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var SessionList = database.GetCollection<Session>("SessionList");
             var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
             if (values.Count() == 0)
             {
@@ -184,9 +168,6 @@ namespace UnrealReplayServer.Databases
                 if (sessionNames == null || sessionNames.Length == 0)
                     return Array.Empty<Session>();
 
-                List<Session> sessions = new List<Session>();
-                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-                var database = client.GetDatabase("replayserver");
                 var SessionList = database.GetCollection<Session>("SessionList");
 
                 for (int i = 0; i < sessionNames.Length; i++)
@@ -213,10 +194,6 @@ namespace UnrealReplayServer.Databases
 
             return await Task.Run(async () =>
             {
-                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-                var database = client.GetDatabase("replayserver");
-                var SessionList = database.GetCollection<Session>("SessionList");
-
                 var result = await SessionList.Find(pQuery).ToListAsync();
 
                 return result.ToArray();
@@ -227,9 +204,6 @@ namespace UnrealReplayServer.Databases
         {
             await Task.Run(async () =>
             {
-                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-                var database = client.GetDatabase("replayserver");
-                var SessionList = database.GetCollection<Session>("SessionList");
                 var sessions = (await SessionList.Find(x => true).ToListAsync()).ToArray();
 
                 for (int i = 0; i < sessions.Length; i++)

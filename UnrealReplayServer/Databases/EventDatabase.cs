@@ -17,10 +17,18 @@ namespace UnrealReplayServer.Databases
     public class EventDatabase : IEventDatabase
     {
         private readonly ConnectionStrings _connectionStrings;
+        
+        private MongoClient client;
+        private IMongoDatabase database;
+        private IMongoCollection eventList;
 
         public EventDatabase(IOptions<ConnectionStrings> connectionStrings)
         {
             _connectionStrings = connectionStrings.Value;
+
+            client = new MongoClient(_connectionStrings.MongoDBConnection);
+            database = client.GetDatabase("replayserver");
+            eventList = database.GetCollection<EventEntry>("EventList");
         }
 
         public async Task AddEvent(string setSessionName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
@@ -28,8 +36,7 @@ namespace UnrealReplayServer.Databases
             MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
             var database = client.GetDatabase("replayserver");
             string eventName = Guid.NewGuid().ToString("N");
-
-            var eventList = database.GetCollection<EventEntry>("EventList");
+           
             var newEntry = new EventEntry
             {
                 GroupName = group,
@@ -47,43 +54,33 @@ namespace UnrealReplayServer.Databases
 
         public async Task UpdateEvent(string setSessionName, string eventName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var eventList = database.GetCollection<EventEntry>("EventList");
-            var values = await eventList.Find(x => x.EventId == eventName).ToListAsync();
-            if (values.Count() == 0) return;
-
+            var filter = Builders<EventEntry>.Filter.Eq(x => x.EventId == eventName);
             var update = Builders<EventEntry>.Update.Set("GroupName", group)
                                                     .Set("Meta", meta)
                                                     .Set("SessionName", setSessionName)
                                                     .Set("Time1", time1.Value)
                                                     .Set("Time2", time2.Value)
                                                     .Set("Data", data);
-            await eventList.UpdateOneAsync(r => r.EventId == eventName, update);
+            await eventList.UpdateOneAsync(filter, update);
 
             Log("[EVENT UPDATE] Updating event: " + eventName);
         }
 
         public async Task<EventEntry[]> GetEventsByGroup(string sessionName, string groupName)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var eventList = database.GetCollection<EventEntry>("EventList");
-            var values = await eventList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count == 0) return Array.Empty<EventEntry>();
-
-            return await Task.Run(() =>
+            return await Task.Run(async () =>
             {
-                var entries = (from ee in values where ee.GroupName == groupName select ee).ToArray();
-                return entries;
+                var filter = Builders<EventEntry>.Filter.And(Builders<EventEntry>.Filter.Eq(x => x.GroupName == groupName),
+                    Builders<EventEntry>.Filter.Eq(x => x.SessionName == sessionName));
+
+                var entries = await eventList.Find(filter).ToListAsync();
+
+                return entries.ToArray();
             });
         }
 
         public async Task<EventEntry> FindEventByName(string eventName)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
-            var eventList = database.GetCollection<EventEntry>("EventList");
             var values = await eventList.Find(x => x.EventId == eventName).ToListAsync();
             if (values.Count() == 0) return null;
 
@@ -96,9 +93,6 @@ namespace UnrealReplayServer.Databases
             {
                 List<string> result = new List<string>();
 
-                MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-                var database = client.GetDatabase("replayserver");
-                var eventList = database.GetCollection<EventEntry>("EventList");
                 var values = await eventList.Find(x => true).ToListAsync();
 
                 foreach (var pair in values)
