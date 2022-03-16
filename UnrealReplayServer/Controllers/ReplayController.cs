@@ -27,6 +27,8 @@ namespace UnrealReplayServer.Controllers
 
         private ISessionDatabase sessionDatabase = null;
         private IEventDatabase eventDatabase = null;
+        private string AuthorizationHeaderValue = "";
+        private bool bUseAuthorizationHeader = false;
 
         public ReplayController(ILogger<ReplayController> logger, ISessionDatabase setSessionDatabase, IEventDatabase setEventDatabase)
         {
@@ -34,35 +36,50 @@ namespace UnrealReplayServer.Controllers
 
             sessionDatabase = setSessionDatabase;
             eventDatabase = setEventDatabase;
+
+            AuthorizationHeaderValue = ((SessionDatabase)sessionDatabase)._applicationSettings.AuthorizationHeaderValue;
+            bUseAuthorizationHeader = ((SessionDatabase)sessionDatabase)._applicationSettings.bUseAuthorizationHeader;
         }
 
         #region Uploading
         [HttpPost]
-        public async Task<StartSessionResponse> PostStartSession(string app, string version, int? cl, string friendlyName)
+        public async Task<ActionResult<StartSessionResponse>> PostStartSession(string app, string version, int? cl, string friendlyName)
         {
+            if (bUseAuthorizationHeader && !Request.Headers.ContainsKey("Authorization") || 
+                Request.Headers["Authorization"] != AuthorizationHeaderValue)
+                return Unauthorized(null);
+
             string session = Guid.NewGuid().ToString("N");
 
             _logger.LogInformation($"ReplayController.PostStartSession -- session: {session}, app: {app}, version: {version}, cl: {cl}, friendlyName: {friendlyName}");
 
             var sessionId = await sessionDatabase.CreateSession(session, app, version, cl, friendlyName);
 
-            return new StartSessionResponse()
+            if (string.IsNullOrEmpty(sessionId)) return Conflict(null);
+
+            return Ok(new StartSessionResponse()
             {
                 SessionId = sessionId
-            };
+            });
         }
 
         [HttpPost("{session}")]
-        public async Task<StartSessionResponse> PostStartSession(string session, string app, string version, int? cl, string friendlyName)
+        public async Task<ActionResult<StartSessionResponse>> PostStartSession(string session, string app, string version, int? cl, string friendlyName)
         {
+            if (bUseAuthorizationHeader && !Request.Headers.ContainsKey("Authorization") ||
+                Request.Headers["Authorization"] != AuthorizationHeaderValue)
+                return Unauthorized(null);
+
             _logger.LogInformation($"ReplayController.PostStartSession -- session: {session}, app: {app}, version: {version}, cl: {cl}, friendlyName: {friendlyName}");
 
             var sessionId = await sessionDatabase.CreateSession(session, app, version, cl, friendlyName);
 
-            return new StartSessionResponse()
+            if (string.IsNullOrEmpty(sessionId)) return Conflict(null);
+
+            return Ok(new StartSessionResponse()
             {
                 SessionId = sessionId
-            };
+            });
         }
 
         [HttpPost("{session}/stopUploading")]
@@ -209,8 +226,8 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
+            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBConnection);
+            var database = client.GetDatabase(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBDatabaseName);
             var SessionList = database.GetCollection<Session>("SessionList");
             var filter = Builders<Session>.Filter.And(Builders<Session>.Filter.Eq(x => x.SessionName, sessionName), Builders<Session>.Filter.ElemMatch(x => x.Viewers, v => v.Username == user));
             var update = Builders<Session>.Update.PullFilter(model => model.Viewers, v => v.Username == user);
@@ -248,8 +265,8 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
+            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBConnection);
+            var database = client.GetDatabase(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBDatabaseName);
             var SessionList = database.GetCollection<Session>("SessionList");
 
             if (final != null && final.Value == true)

@@ -36,7 +36,7 @@ namespace UnrealReplayServer
                 options.OutputFormatters.Insert(0, new BinaryOutputFormatter());
             });
             services.AddOptions();
-            services.Configure<ConnectionStrings>(Configuration.GetSection("ConnectionStrings"));
+            services.Configure<ApplicationDefaults>(Configuration.GetSection("ApplicationDefaults"));
             services.AddSingleton<ISessionDatabase, SessionDatabase>();
             services.AddSingleton<IEventDatabase, EventDatabase>();
         }

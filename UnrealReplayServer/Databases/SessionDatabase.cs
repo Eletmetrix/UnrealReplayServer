@@ -16,18 +16,18 @@ namespace UnrealReplayServer.Databases
 {
     public class SessionDatabase : ISessionDatabase
     {
-        public readonly ConnectionStrings _connectionStrings;
+        public readonly ApplicationDefaults _applicationSettings;
 
         private readonly MongoClient client;
         private readonly IMongoDatabase database;
-        private readonly IMongoCollection SessionList;
+        private readonly IMongoCollection<Session> SessionList;
 
-        public SessionDatabase(IOptions<ConnectionStrings> connectionString)
+        public SessionDatabase(IOptions<ApplicationDefaults> connectionString)
         {
-            _connectionStrings = connectionString.Value;
+            _applicationSettings = connectionString.Value;
 
-            client = new MongoClient(_connectionStrings.MongoDBConnection);
-            database = client.GetDatabase("replayserver");
+            client = new MongoClient(_applicationSettings.MongoDBConnection);
+            database = client.GetDatabase(_applicationSettings.MongoDBDatabaseName);
             SessionList = database.GetCollection<Session>("SessionList");
         }
 
@@ -168,7 +168,7 @@ namespace UnrealReplayServer.Databases
                 if (sessionNames == null || sessionNames.Length == 0)
                     return Array.Empty<Session>();
 
-                var SessionList = database.GetCollection<Session>("SessionList");
+                List<Session> sessions = new List<Session>();
 
                 for (int i = 0; i < sessionNames.Length; i++)
                 {

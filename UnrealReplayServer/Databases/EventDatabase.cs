@@ -16,25 +16,23 @@ namespace UnrealReplayServer.Databases
 {
     public class EventDatabase : IEventDatabase
     {
-        private readonly ConnectionStrings _connectionStrings;
+        private readonly ApplicationDefaults _applicationSettings;
         
         private MongoClient client;
         private IMongoDatabase database;
-        private IMongoCollection eventList;
+        private IMongoCollection<EventEntry> eventList;
 
-        public EventDatabase(IOptions<ConnectionStrings> connectionStrings)
+        public EventDatabase(IOptions<ApplicationDefaults> connectionStrings)
         {
-            _connectionStrings = connectionStrings.Value;
+            _applicationSettings = connectionStrings.Value;
 
-            client = new MongoClient(_connectionStrings.MongoDBConnection);
-            database = client.GetDatabase("replayserver");
+            client = new MongoClient(_applicationSettings.MongoDBConnection);
+            database = client.GetDatabase(_applicationSettings.MongoDBDatabaseName);
             eventList = database.GetCollection<EventEntry>("EventList");
         }
 
         public async Task AddEvent(string setSessionName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
         {
-            MongoClient client = new MongoClient(_connectionStrings.MongoDBConnection);
-            var database = client.GetDatabase("replayserver");
             string eventName = Guid.NewGuid().ToString("N");
            
             var newEntry = new EventEntry
@@ -54,7 +52,7 @@ namespace UnrealReplayServer.Databases
 
         public async Task UpdateEvent(string setSessionName, string eventName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
         {
-            var filter = Builders<EventEntry>.Filter.Eq(x => x.EventId == eventName);
+            var filter = Builders<EventEntry>.Filter.Eq(x => x.EventId, eventName);
             var update = Builders<EventEntry>.Update.Set("GroupName", group)
                                                     .Set("Meta", meta)
                                                     .Set("SessionName", setSessionName)
@@ -70,8 +68,8 @@ namespace UnrealReplayServer.Databases
         {
             return await Task.Run(async () =>
             {
-                var filter = Builders<EventEntry>.Filter.And(Builders<EventEntry>.Filter.Eq(x => x.GroupName == groupName),
-                    Builders<EventEntry>.Filter.Eq(x => x.SessionName == sessionName));
+                var filter = Builders<EventEntry>.Filter.And(Builders<EventEntry>.Filter.Eq(x => x.GroupName, groupName),
+                    Builders<EventEntry>.Filter.Eq(x => x.SessionName, sessionName));
 
                 var entries = await eventList.Find(filter).ToListAsync();
 
