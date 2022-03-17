@@ -21,5 +21,8 @@ namespace UnrealReplayServer.Databases
         Task<bool> SetUsers(string sessionName, string[] users);
         Task StopSession(string sessionName, int totalDemoTimeMs, int totalChunks, int totalBytes);
         Task CheckViewerInactivity();
+        Task CheckSessionInactivity();
+        Task RemoveEndedLiveSessions();
+        Task DoWorkOnStartup();
     }
 }

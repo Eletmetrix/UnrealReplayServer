@@ -11,6 +11,12 @@ namespace UnrealReplayServer.Connectors
 
         public string MongoDBDatabaseName { get; set; }
 
+        public bool bLiveSessionMode { get; set; }
+
+        public int HeartbeatCheckTime { get; set; }
+
+        public int TimeoutOfLiveSession { get; set; }
+
         public bool bUseAuthorizationHeader { get; set; }
 
         public string AuthorizationHeaderValue { get; set; }

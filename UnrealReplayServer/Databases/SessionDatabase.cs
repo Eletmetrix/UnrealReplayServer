@@ -22,6 +22,8 @@ namespace UnrealReplayServer.Databases
         private readonly IMongoDatabase database;
         private readonly IMongoCollection<Session> SessionList;
 
+        private readonly int TimeoutOfLiveSession;
+
         public SessionDatabase(IOptions<ApplicationDefaults> connectionString)
         {
             _applicationSettings = connectionString.Value;
@@ -29,6 +31,8 @@ namespace UnrealReplayServer.Databases
             client = new MongoClient(_applicationSettings.MongoDBConnection);
             database = client.GetDatabase(_applicationSettings.MongoDBDatabaseName);
             SessionList = database.GetCollection<Session>("SessionList");
+
+            TimeoutOfLiveSession = _applicationSettings.TimeoutOfLiveSession * -1;
         }
 
         public async Task<string> CreateSession(string setSessionName, string setAppVersion, string setNetVersion, int? setChangelist,
@@ -156,6 +160,8 @@ namespace UnrealReplayServer.Databases
                                                  .Set(x => x.TotalUploadedBytes, totalBytes);
             await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
 
+            await RemoveEndedLiveSessions();
+
             Log($"[END] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}, TotalChunks={totalChunks}, " +
                 $"TotalUploadedBytes={totalBytes}");
         }
@@ -204,11 +210,83 @@ namespace UnrealReplayServer.Databases
         {
             await Task.Run(async () =>
             {
-                var sessions = (await SessionList.Find(x => true).ToListAsync()).ToArray();
+                var filter = Builders<Session>.Filter.Where(x => true);
+                var update = Builders<Session>.Update.PullFilter(x => x.Viewers, v => v.LastSeen <= DateTimeOffset.UtcNow - TimeSpan.FromSeconds(30));
+                await SessionList.UpdateManyAsync(filter, update);
+            });
+        }
 
-                for (int i = 0; i < sessions.Length; i++)
+        public async Task CheckSessionInactivity()
+        {
+            await Task.Run(async () =>
+            {
+                long controlTime = DateTimeOffset.UtcNow.AddSeconds(TimeoutOfLiveSession).ToUnixTimeMilliseconds();
+                var filter = Builders<Session>.Filter.Eq(x => x.IsLive, true);
+
+                var result = await SessionList.Find(filter).ToListAsync();
+
+                List<string> sessionNames = new List<string>();
+                for (int i = 0; i < result.Count(); i++)
                 {
-                    sessions[i].CheckViewersTimeout();
+                    long elapsedTime = result[i].CreationDate.ToUnixTimeMilliseconds() + result[i].TotalDemoTimeMs;
+                    if (elapsedTime < controlTime)
+                    {
+                        sessionNames.Add(result[i].SessionName);
+                    }
+                }
+
+                var filter1 = Builders<Session>.Filter.In(x => x.SessionName, sessionNames.ToArray());
+                var update = Builders<Session>.Update.Set(x => x.IsLive, false);
+
+                await SessionList.UpdateManyAsync(filter1, update);
+
+                await RemoveEndedLiveSessions();
+            });
+        }
+
+        public async Task RemoveEndedLiveSessions()
+        {
+            if (_applicationSettings.bLiveSessionMode)
+            {
+                await Task.Run(async () =>
+                {
+                    var eventList = database.GetCollection<EventEntry>("EventList");
+
+                    long controlTime = DateTimeOffset.UtcNow.AddSeconds(TimeoutOfLiveSession).ToUnixTimeMilliseconds();
+                    var filter = Builders<Session>.Filter.Eq(x => x.IsLive, false);
+
+                    var result = await SessionList.Find(filter).ToListAsync();
+
+                    var pQuery = Builders<EventEntry>.Filter.Empty;
+                    for (int i = result.Count() - 1; i >= 0; i--)
+                    {
+                        long elapsedTime = result[i].CreationDate.ToUnixTimeMilliseconds() + result[i].TotalDemoTimeMs;
+                        if (elapsedTime < controlTime)
+                        {
+                            pQuery |= Builders<EventEntry>.Filter.Eq(x => x.SessionName, result[i].SessionName);
+                        }
+                        else
+                        {
+                            result.RemoveAt(i);
+                        }
+                    }
+
+                    await eventList.DeleteManyAsync(pQuery);
+                    await SessionList.DeleteManyAsync(filter);
+                });
+            }
+        }
+
+        public async Task DoWorkOnStartup()
+        {
+            await Task.Run(async () =>
+            {
+                for (;;)
+                {
+                    await Task.Delay(_applicationSettings.HeartbeatCheckTime);
+                    await CheckViewerInactivity();
+                    await CheckSessionInactivity();
+                    await RemoveEndedLiveSessions();
                 }
             });
         }

@@ -7,8 +7,6 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace UnrealReplayServer.Databases.Models
 {
@@ -71,29 +69,5 @@ namespace UnrealReplayServer.Databases.Models
 
         [BsonElement("SessionFiles")]
         public List<SessionFile> SessionFiles = new List<SessionFile>();
-
-        internal void CheckViewersTimeout()
-        {
-            CheckViewersTimeout(TimeSpan.FromSeconds(30), DateTimeOffset.UtcNow);
-        }
-
-        // TODO: CheckViewersTimeout based on MongoDB values.
-        internal void CheckViewersTimeout(TimeSpan maxDeltaTime, DateTimeOffset referenceTime)
-        {
-            foreach (var item in Viewers)
-            {
-                if (item.LastSeen < referenceTime - maxDeltaTime)
-                {
-                    string name = item.Username;
-                    Viewers.Remove(item);
-                    Log($"Removed viewer {name} due to inaactivity");
-                }
-            }
-        }
-
-        private void Log(string ling)
-        {
-            // Empty
-        }
     }
 }

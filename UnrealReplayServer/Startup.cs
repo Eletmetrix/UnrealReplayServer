@@ -5,14 +5,9 @@ Copyright (c) 2021 Henning Thoele
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using UnrealReplayServer.Databases;
 using UnrealReplayServer.Connectors;
@@ -39,6 +34,7 @@ namespace UnrealReplayServer
             services.Configure<ApplicationDefaults>(Configuration.GetSection("ApplicationDefaults"));
             services.AddSingleton<ISessionDatabase, SessionDatabase>();
             services.AddSingleton<IEventDatabase, EventDatabase>();
+            services.AddHttpClient();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -56,6 +52,10 @@ namespace UnrealReplayServer
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
+            });
+
+            Task.Run(() => {
+                app.ApplicationServices.GetRequiredService<ISessionDatabase>().DoWorkOnStartup();
             });
         }
     }

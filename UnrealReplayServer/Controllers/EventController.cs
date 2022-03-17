@@ -32,6 +32,7 @@ namespace UnrealReplayServer.Controllers
             
             sessionDatabase = setSessionDatabase;
             eventDatabase = setEventDatabase;
+            System.Diagnostics.Debug.WriteLine("asd");
         }
 
         #region Searching
