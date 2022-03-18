@@ -5,6 +5,13 @@ Copyright (c) 2021 Henning Thoele
 
 namespace UnrealReplayServer.Connectors
 {
+    public class UserAgentDetails
+    {
+        public string[] AllowedUserAgents { get; set; }
+
+        public bool bUseUserAgentFilter { get; set; }
+    }
+
     public class ApplicationDefaults
     {
         public string MongoDBConnection { get; set; }
@@ -20,5 +27,7 @@ namespace UnrealReplayServer.Connectors
         public bool bUseAuthorizationHeader { get; set; }
 
         public string AuthorizationHeaderValue { get; set; }
+
+        public UserAgentDetails UserAgentDetails { get; set; }
     }
 }

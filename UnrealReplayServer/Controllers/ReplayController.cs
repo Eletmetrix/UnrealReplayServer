@@ -14,9 +14,11 @@ using System.Threading.Tasks;
 using UnrealReplayServer.Databases;
 using UnrealReplayServer.Databases.Models;
 using UnrealReplayServer.Models;
+using UnrealReplayServer.Web;
 
 namespace UnrealReplayServer.Controllers
 {
+    [TypeFilter(typeof(UserAgentActionFilterAttribute))]
     [ApiController]
     [Route("[controller]")]
     public class ReplayController : ControllerBase
