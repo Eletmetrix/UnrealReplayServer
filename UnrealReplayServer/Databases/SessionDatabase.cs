@@ -246,7 +246,7 @@ namespace UnrealReplayServer.Databases
 
         public async Task RemoveEndedLiveSessions()
         {
-            if (_applicationSettings.bLiveSessionMode)
+            if (_applicationSettings.bLiveStreamMode)
             {
                 await Task.Run(async () =>
                 {
