@@ -12,11 +12,20 @@ namespace UnrealReplayServer.Connectors
         public bool bUseUserAgentFilter { get; set; }
     }
 
-    public class ApplicationDefaults
+    public class MongoDB
     {
         public string MongoDBConnection { get; set; }
 
         public string MongoDBDatabaseName { get; set; }
+
+        public bool bUseEnvVariable_Connection { get; set; }
+
+        public bool bUseEnvVariable_DatabaseName { get; set; }
+    }
+
+    public class ApplicationDefaults
+    {
+        public MongoDB MongoDB { get; set; }
 
         public bool bLiveStreamMode { get; set; }
 

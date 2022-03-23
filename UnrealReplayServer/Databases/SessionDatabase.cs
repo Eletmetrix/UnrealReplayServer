@@ -24,12 +24,18 @@ namespace UnrealReplayServer.Databases
 
         private readonly int TimeoutOfLiveSession;
 
+        public string ConnectionString;
+        public string DatabaseName;
+
         public SessionDatabase(IOptions<ApplicationDefaults> connectionString)
         {
             _applicationSettings = connectionString.Value;
 
-            client = new MongoClient(_applicationSettings.MongoDBConnection);
-            database = client.GetDatabase(_applicationSettings.MongoDBDatabaseName);
+            ConnectionString = _applicationSettings.MongoDB.bUseEnvVariable_Connection ? Environment.GetEnvironmentVariable("MONGO_CON_URL") : _applicationSettings.MongoDB.MongoDBConnection;
+            DatabaseName = _applicationSettings.MongoDB.bUseEnvVariable_DatabaseName ? Environment.GetEnvironmentVariable("MONGO_DB_NAME") : _applicationSettings.MongoDB.MongoDBDatabaseName;
+
+            client = new MongoClient(ConnectionString);
+            database = client.GetDatabase(DatabaseName);
             SessionList = database.GetCollection<Session>("SessionList");
 
             TimeoutOfLiveSession = _applicationSettings.TimeoutOfLiveSession * -1;

@@ -26,8 +26,11 @@ namespace UnrealReplayServer.Databases
         {
             _applicationSettings = connectionStrings.Value;
 
-            client = new MongoClient(_applicationSettings.MongoDBConnection);
-            database = client.GetDatabase(_applicationSettings.MongoDBDatabaseName);
+            string ConnectionString = _applicationSettings.MongoDB.bUseEnvVariable_Connection ? Environment.GetEnvironmentVariable("MONGO_CON_URL") : _applicationSettings.MongoDB.MongoDBConnection;
+            string DatabaseName = _applicationSettings.MongoDB.bUseEnvVariable_DatabaseName ? Environment.GetEnvironmentVariable("MONGO_DB_NAME") : _applicationSettings.MongoDB.MongoDBDatabaseName;
+
+            client = new MongoClient(ConnectionString);
+            database = client.GetDatabase(DatabaseName);
             eventList = database.GetCollection<EventEntry>("EventList");
         }
 

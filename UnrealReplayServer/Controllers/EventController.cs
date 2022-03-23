@@ -5,18 +5,15 @@ Copyright (c) 2021 Henning Thoele
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Net;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using UnrealReplayServer.Databases;
 using UnrealReplayServer.Models;
+using UnrealReplayServer.Web;
 
 namespace UnrealReplayServer.Controllers
 {
+    [TypeFilter(typeof(UserAgentActionFilterAttribute))]
     [ApiController]
     [Route("[controller]")]
     public class EventController : ControllerBase

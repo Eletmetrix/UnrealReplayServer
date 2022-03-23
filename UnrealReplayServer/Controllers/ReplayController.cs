@@ -226,8 +226,8 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBConnection);
-            var database = client.GetDatabase(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBDatabaseName);
+            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase).ConnectionString);
+            var database = client.GetDatabase(((SessionDatabase)sessionDatabase).DatabaseName);
             var SessionList = database.GetCollection<Session>("SessionList");
             var filter = Builders<Session>.Filter.And(Builders<Session>.Filter.Eq(x => x.SessionName, sessionName), Builders<Session>.Filter.ElemMatch(x => x.Viewers, v => v.Username == user));
             var update = Builders<Session>.Update.PullFilter(model => model.Viewers, v => v.Username == user);
@@ -265,8 +265,8 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBConnection);
-            var database = client.GetDatabase(((SessionDatabase)sessionDatabase)._applicationSettings.MongoDBDatabaseName);
+            MongoClient client = new MongoClient(((SessionDatabase)sessionDatabase).ConnectionString);
+            var database = client.GetDatabase(((SessionDatabase)sessionDatabase).DatabaseName);
             var SessionList = database.GetCollection<Session>("SessionList");
 
             if (final != null && final.Value == true)
