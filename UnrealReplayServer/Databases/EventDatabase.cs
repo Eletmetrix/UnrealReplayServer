@@ -1,4 +1,4 @@
-﻿/*
+/*
 The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
@@ -7,37 +7,28 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MongoDB.Driver;
 using UnrealReplayServer.Databases.Models;
 using UnrealReplayServer.Connectors;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 
 namespace UnrealReplayServer.Databases
 {
-    public class EventDatabase : IEventDatabase
+    public class EventDatabase : DbContext, IEventDatabase
     {
         private readonly ApplicationDefaults _applicationSettings;
-        
-        private MongoClient client;
-        private IMongoDatabase database;
-        private IMongoCollection<EventEntry> eventList;
+        private readonly DatabaseContext _context;
 
-        public EventDatabase(IOptions<ApplicationDefaults> connectionStrings)
+        public EventDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionStrings)
         {
+            _context = context;
             _applicationSettings = connectionStrings.Value;
-
-            string ConnectionString = _applicationSettings.MongoDB.bUseEnvVariable_Connection ? Environment.GetEnvironmentVariable("MONGO_CON_URL") : _applicationSettings.MongoDB.MongoDBConnection;
-            string DatabaseName = _applicationSettings.MongoDB.bUseEnvVariable_DatabaseName ? Environment.GetEnvironmentVariable("MONGO_DB_NAME") : _applicationSettings.MongoDB.MongoDBDatabaseName;
-
-            client = new MongoClient(ConnectionString);
-            database = client.GetDatabase(DatabaseName);
-            eventList = database.GetCollection<EventEntry>("EventList");
         }
 
         public async Task AddEvent(string setSessionName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
         {
             string eventName = Guid.NewGuid().ToString("N");
-           
+
             var newEntry = new EventEntry
             {
                 GroupName = group,
@@ -48,44 +39,44 @@ namespace UnrealReplayServer.Databases
                 Data = data,
                 EventId = eventName
             };
-            await eventList.InsertOneAsync(newEntry);
+            _context.eventList.Add(newEntry);
+            await _context.SaveChangesAsync();
 
             Log("[EVENT ADD] Adding event: " + eventName);
         }
 
         public async Task UpdateEvent(string setSessionName, string eventName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)
         {
-            var filter = Builders<EventEntry>.Filter.Eq(x => x.EventId, eventName);
-            var update = Builders<EventEntry>.Update.Set("GroupName", group)
-                                                    .Set("Meta", meta)
-                                                    .Set("SessionName", setSessionName)
-                                                    .Set("Time1", time1.Value)
-                                                    .Set("Time2", time2.Value)
-                                                    .Set("Data", data);
-            await eventList.UpdateOneAsync(filter, update);
+            var updateEvent = await _context.eventList.SingleOrDefaultAsync(x => x.EventId == eventName);
+            if (updateEvent != null)
+            {
+                updateEvent.GroupName = group;
+                updateEvent.Meta = meta;
+                updateEvent.SessionName = setSessionName;
+                updateEvent.Time1 = time1.Value;
+                updateEvent.Time2 = time2.Value;
+                updateEvent.Data = data;
+                await _context.SaveChangesAsync();
 
-            Log("[EVENT UPDATE] Updating event: " + eventName);
+                Log("[EVENT UPDATE] Updating event: " + eventName);
+            }
         }
 
         public async Task<EventEntry[]> GetEventsByGroup(string sessionName, string groupName)
         {
             return await Task.Run(async () =>
             {
-                var filter = Builders<EventEntry>.Filter.And(Builders<EventEntry>.Filter.Eq(x => x.GroupName, groupName),
-                    Builders<EventEntry>.Filter.Eq(x => x.SessionName, sessionName));
-
-                var entries = await eventList.Find(filter).ToListAsync();
-
-                return entries.ToArray();
+                return await _context.eventList
+                    .Where(x => x.GroupName == groupName)
+                    .ToArrayAsync();
             });
         }
 
         public async Task<EventEntry> FindEventByName(string eventName)
         {
-            var values = await eventList.Find(x => x.EventId == eventName).ToListAsync();
-            if (values.Count() == 0) return null;
-
-            return values.First();
+            return await _context.eventList
+                .Where(x => x.EventId == eventName)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<string[]> FindSessionNamesByGroup(string group)
@@ -94,20 +85,11 @@ namespace UnrealReplayServer.Databases
             {
                 List<string> result = new List<string>();
 
-                var values = await eventList.Find(x => true).ToListAsync();
-
-                foreach (var pair in values)
-                {
-                    if (pair.GroupName == group)
-                    {
-                        if (result.Contains(pair.SessionName) == false)
-                        {
-                            result.Add(pair.SessionName);
-                        }
-                    }
-                }
-
-                return result.ToArray();
+                return await _context.eventList
+                    .Where(x => x.GroupName == group)
+                    .Select(x => x.SessionName)
+                    .Distinct()
+                    .ToArrayAsync();
             });
         }
 

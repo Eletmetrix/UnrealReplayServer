@@ -11,6 +11,8 @@ using Microsoft.Extensions.Hosting;
 using System.Threading.Tasks;
 using UnrealReplayServer.Databases;
 using UnrealReplayServer.Connectors;
+using Microsoft.EntityFrameworkCore;
+using System;
 
 namespace UnrealReplayServer
 {
@@ -32,8 +34,16 @@ namespace UnrealReplayServer
             });
             services.AddOptions();
             services.Configure<ApplicationDefaults>(Configuration.GetSection("ApplicationDefaults"));
-            services.AddSingleton<ISessionDatabase, SessionDatabase>();
-            services.AddSingleton<IEventDatabase, EventDatabase>();
+
+            var useEnvVariableConnection = Configuration.GetValue<bool>("ApplicationDefaults:MySql:bUseEnvVariable_Connection");
+            string connectionString = useEnvVariableConnection ? Environment.GetEnvironmentVariable("DB_CON_URL") : Configuration.GetValue<string>("ApplicationDefaults:MySql:ConnectionString");
+
+            services.AddDbContextPool<DatabaseContext>(
+                options => options.UseMySql(ServerVersion.AutoDetect(connectionString))
+            );
+
+            services.AddScoped<ISessionDatabase, SessionDatabase>();
+            services.AddScoped<IEventDatabase, EventDatabase>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
