@@ -21,13 +21,11 @@ namespace UnrealReplayServer.Databases
         public readonly ApplicationDefaults _applicationSettings;
         private readonly DatabaseContext _context;
         private readonly int TimeoutOfLiveSession;
-        private readonly ILogger<SessionDatabase> _logger;
 
-        public SessionDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionString, ILogger<SessionDatabase> logger)
+        public SessionDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionString)
         {
             _context = context;
             _applicationSettings = connectionString.Value;
-            _logger = logger;
 
             TimeoutOfLiveSession = _applicationSettings.TimeoutOfLiveSession * -1;
         }
