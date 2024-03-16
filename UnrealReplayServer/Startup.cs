@@ -39,7 +39,7 @@ namespace UnrealReplayServer
             string connectionString = useEnvVariableConnection ? Environment.GetEnvironmentVariable("DB_CON_URL") : Configuration.GetValue<string>("ApplicationDefaults:MySql:ConnectionString");
 
             services.AddDbContextPool<DatabaseContext>(
-                options => options.UseMySql(ServerVersion.AutoDetect(connectionString))
+                options => options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
             );
 
             services.AddScoped<ISessionDatabase, SessionDatabase>();
@@ -63,8 +63,16 @@ namespace UnrealReplayServer
                 endpoints.MapControllers();
             });
 
-            Task.Run(() => {
-                app.ApplicationServices.GetRequiredService<ISessionDatabase>().DoWorkOnStartup();
+            Task.Run(async () => {
+                using (var scope = app.ApplicationServices.CreateScope())
+                {
+                    var context = scope.ServiceProvider.GetRequiredService<DatabaseContext>();
+                    context.Database.Migrate();
+                    context.Database.EnsureCreated();
+
+                    var sessionDatabase = scope.ServiceProvider.GetRequiredService<ISessionDatabase>();
+                    await sessionDatabase.DoWorkOnStartup();
+                }
             });
         }
     }

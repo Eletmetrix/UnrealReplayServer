@@ -4,26 +4,30 @@ Copyright (c) 2021 Henning Thoele
 */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnrealReplayServer.Connectors;
+using UnrealReplayServer.Controllers;
 using UnrealReplayServer.Databases.Models;
 
 namespace UnrealReplayServer.Databases
 {
-    public class SessionDatabase : DbContext, ISessionDatabase
+    public class SessionDatabase : ISessionDatabase
     {
-        private readonly ApplicationDefaults _applicationSettings;
+        public readonly ApplicationDefaults _applicationSettings;
         private readonly DatabaseContext _context;
         private readonly int TimeoutOfLiveSession;
+        private readonly ILogger<SessionDatabase> _logger;
 
-        public SessionDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionString)
+        public SessionDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionString, ILogger<SessionDatabase> logger)
         {
             _context = context;
             _applicationSettings = connectionString.Value;
+            _logger = logger;
 
             TimeoutOfLiveSession = _applicationSettings.TimeoutOfLiveSession * -1;
         }
@@ -48,7 +52,7 @@ namespace UnrealReplayServer.Databases
                 IsLive = true
             };
             _context.sessionList.Add(newSession);
-            SaveChanges();
+            _context.SaveChanges();
             return newSession.SessionName;
         }
 
@@ -71,7 +75,7 @@ namespace UnrealReplayServer.Databases
         {
             return await _context.sessionList
                 .Where(x => x.SessionName == sessionName && chunkIndex >= 0 && chunkIndex < x.SessionFiles.Count)
-                .Select(x => x.SessionFiles[chunkIndex])
+                .Select(x => x.SessionFiles.ToArray()[chunkIndex])
                 .FirstOrDefaultAsync();
         }
 
@@ -129,6 +133,63 @@ namespace UnrealReplayServer.Databases
             return false;
         }
 
+        public async Task UpdateSession(string sessionName, string viewerName, bool final)
+        {
+            var session = await _context.sessionList
+                .Include(s => s.Viewers)
+                .FirstOrDefaultAsync(s => s.SessionName == sessionName);
+
+            if (final)
+            {
+                // Remove viewer if final is true
+
+                var viewerToRemove = session.Viewers.FirstOrDefault(v => v.Username == viewerName);
+                if (viewerToRemove != null)
+                {
+                    session.Viewers.Remove(viewerToRemove);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            else
+            {
+                // Update "last seen" timestamp
+
+                var viewer = session.Viewers.FirstOrDefault(v => v.Username == viewerName);
+                if (viewer != null)
+                {
+                    viewer.LastSeen = DateTimeOffset.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
+        }
+
+        public async Task StartDownloading(string sessionName, string user)
+        {
+            var session = await _context.sessionList
+                .Where(x => x.SessionName == sessionName && x.Viewers.Any(v => v.Username == user))
+                .FirstOrDefaultAsync();
+
+            if (session != null)
+            {
+                var viewerToRemove = session.Viewers.FirstOrDefault(v => v.Username == user);
+                if (viewerToRemove != null)
+                {
+                    session.Viewers.Remove(viewerToRemove);
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            var sessionToEdit = await _context.sessionList
+                .Include(s => s.Viewers)
+                .FirstOrDefaultAsync(s => s.SessionName == sessionName);
+
+            if (session != null)
+            {
+                var newViewer = new SessionViewer { Username = user, LastSeen = DateTimeOffset.UtcNow };
+                sessionToEdit.Viewers.Add(newViewer);
+                await _context.SaveChangesAsync();
+            }
+        }
         public async Task StopSession(string sessionName, int totalDemoTimeMs, int totalChunks, int totalBytes)
         {
             var session = await _context.sessionList.FirstOrDefaultAsync(x => x.SessionName == sessionName);
@@ -182,7 +243,11 @@ namespace UnrealReplayServer.Databases
             var sessions = await _context.sessionList.Include(s => s.Viewers).ToListAsync();
             foreach (var session in sessions)
             {
-                session.Viewers.RemoveAll(v => v.LastSeen <= DateTimeOffset.UtcNow - TimeSpan.FromSeconds(30));
+                var viewersToRemove = session.Viewers.Where(v => v.LastSeen <= DateTimeOffset.UtcNow - TimeSpan.FromSeconds(30));
+                foreach (var viewer in viewersToRemove)
+                {
+                    session.Viewers.Remove(viewer);
+                }
             }
 
             await _context.SaveChangesAsync();
@@ -213,7 +278,7 @@ namespace UnrealReplayServer.Databases
                     .Where(x => !x.IsLive && x.CreationDate.AddMilliseconds(x.TotalDemoTimeMs) < controlTime)
                     .ToListAsync();
                 var eventsToRemove = await _context.eventList
-                    .Where(x => sessionsToRemove.Any(s => s.SessionName == x.SessionName))
+                    .Where(x => sessionsToRemove.Select(s => s.SessionName).Contains(x.SessionName))
                     .ToListAsync();
 
                 _context.eventList.RemoveRange(eventsToRemove);
@@ -227,7 +292,7 @@ namespace UnrealReplayServer.Databases
         {
             await Task.Run(async () =>
             {
-                for (; ; )
+                while (true)
                 {
                     await Task.Delay(_applicationSettings.HeartbeatCheckTime);
                     await CheckViewerInactivity();

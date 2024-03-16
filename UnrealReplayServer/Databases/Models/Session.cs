@@ -3,20 +3,30 @@ The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
 
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace UnrealReplayServer.Databases.Models
 {
     public class SessionViewer
     {
+        [Required]
+        [Key]
+        public int Id { get; set; }
+
         public string Username { get; set; } = string.Empty;
 
         public DateTimeOffset LastSeen { get; set; } = DateTimeOffset.MinValue;
+
+        public virtual Session Session { get; set; }
     }
 
     public class Session
     {
+        [Required]
+        [Key]
         public int Id { get; set; }
 
         public bool IsLive { get; set; } = false;
@@ -43,10 +53,10 @@ namespace UnrealReplayServer.Databases.Models
 
         public string[] Users { get; set; } = Array.Empty<string>();
 
-        public List<SessionViewer> Viewers { get; set; } = new List<SessionViewer>();
+        public virtual ICollection<SessionViewer> Viewers { get; set; } = new List<SessionViewer>();
 
         public SessionFile HeaderFile { get; set; }
 
-        public List<SessionFile> SessionFiles = new List<SessionFile>();
+        public virtual ICollection<SessionFile> SessionFiles { get; set; } = new List<SessionFile>();
     }
 }

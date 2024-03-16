@@ -4,11 +4,14 @@ Copyright (c) 2021 Henning Thoele
 */
 
 using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace UnrealReplayServer.Databases.Models
 {
     public class AuthorizationHeader
     {
+        [Required]
+        [Key]
         public int Id { get; set; }
 
         public string AuthorizationHeaderValue { get; set; }

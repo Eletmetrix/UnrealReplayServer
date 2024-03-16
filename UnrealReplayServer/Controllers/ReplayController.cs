@@ -5,7 +5,6 @@ Copyright (c) 2021 Henning Thoele
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 using System;
 using System.IO;
 using System.Linq;
@@ -37,8 +36,8 @@ namespace UnrealReplayServer.Controllers
             sessionDatabase = setSessionDatabase;
             eventDatabase = setEventDatabase;
 
-            AuthorizationHeaderValue = ((MongoDBSessionDatabase)sessionDatabase)._applicationSettings.AuthorizationHeaderValue;
-            bUseAuthorizationHeader = ((MongoDBSessionDatabase)sessionDatabase)._applicationSettings.bUseAuthorizationHeader;
+            AuthorizationHeaderValue = ((SessionDatabase)sessionDatabase)._applicationSettings.AuthorizationHeaderValue;
+            bUseAuthorizationHeader = ((SessionDatabase)sessionDatabase)._applicationSettings.bUseAuthorizationHeader;
         }
 
         #region Uploading
@@ -226,19 +225,7 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            MongoClient client = new MongoClient(((MongoDBSessionDatabase)sessionDatabase).ConnectionString);
-            var database = client.GetDatabase(((MongoDBSessionDatabase)sessionDatabase).DatabaseName);
-            var SessionList = database.GetCollection<Session>("SessionList");
-            var filter = Builders<Session>.Filter.And(Builders<Session>.Filter.Eq(x => x.SessionName, sessionName), Builders<Session>.Filter.ElemMatch(x => x.Viewers, v => v.Username == user));
-            var update = Builders<Session>.Update.PullFilter(model => model.Viewers, v => v.Username == user);
-            await SessionList.UpdateOneAsync(filter, update);
-
-            _logger.LogInformation($"ReplayController.StartDownloading -- allright 1!");
-
-            var newViewer = new SessionViewer { Username = user, LastSeen = DateTimeOffset.UtcNow };
-            await SessionList.FindOneAndUpdateAsync(x => x.SessionName == sessionName, Builders<Session>.Update.Push(e => e.Viewers, newViewer));
-
-            _logger.LogInformation($"ReplayController.StartDownloading -- allright 2!");
+            await sessionDatabase.StartDownloading(sessionName, user);
 
             var resp = new StartDownloadingResponse()
             {
@@ -248,7 +235,7 @@ namespace UnrealReplayServer.Controllers
                 ViewerId = user
             };
 
-            _logger.LogInformation($"ReplayController.StartDownloading -- allright 3!");
+            _logger.LogInformation($"ReplayController.StartDownloading -- new user started to download a session!");
 
             return resp;
         }
@@ -265,23 +252,7 @@ namespace UnrealReplayServer.Controllers
                 return null;
             }
 
-            MongoClient client = new MongoClient(((MongoDBSessionDatabase)sessionDatabase).ConnectionString);
-            var database = client.GetDatabase(((MongoDBSessionDatabase)sessionDatabase).DatabaseName);
-            var SessionList = database.GetCollection<Session>("SessionList");
-
-            if (final != null && final.Value == true)
-            {
-                await SessionList.FindOneAndUpdateAsync(x => x.SessionName == sessionName, Builders<Session>.Update.PullFilter(p => p.Viewers, f => f.Username == viewerName));
-            }
-            else
-            {
-                // Update "last seen" timestamp
-                var filter = Builders<Session>.Filter.And(Builders<Session>.Filter.Eq(x => x.SessionName, sessionName), 
-                    Builders<Session>.Filter.ElemMatch(x => x.Viewers, v => v.Username == viewerName));
-                var update = Builders<Session>.Update.Set(model => model.Viewers[-1].LastSeen, DateTimeOffset.UtcNow);
-
-                await SessionList.UpdateOneAsync(filter, update);
-            }
+            await sessionDatabase.UpdateSession(sessionName, viewerName, (final != null ? final.Value : false));
 
             return null;
         }

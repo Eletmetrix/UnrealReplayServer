@@ -14,7 +14,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace UnrealReplayServer.Databases
 {
-    public class EventDatabase : DbContext, IEventDatabase
+    public class EventDatabase : IEventDatabase
     {
         private readonly ApplicationDefaults _applicationSettings;
         private readonly DatabaseContext _context;

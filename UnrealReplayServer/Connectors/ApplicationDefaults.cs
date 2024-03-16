@@ -12,20 +12,16 @@ namespace UnrealReplayServer.Connectors
         public bool bUseUserAgentFilter { get; set; }
     }
 
-    public class MongoDB
+    public class MySql
     {
-        public string MongoDBConnection { get; set; }
-
-        public string MongoDBDatabaseName { get; set; }
+        public string ConnectionString { get; set; }
 
         public bool bUseEnvVariable_Connection { get; set; }
-
-        public bool bUseEnvVariable_DatabaseName { get; set; }
     }
 
     public class ApplicationDefaults
     {
-        public MongoDB MongoDB { get; set; }
+        public MySql MySql { get; set; }
 
         public bool bLiveStreamMode { get; set; }
 
