@@ -3,25 +3,27 @@ The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
 
-using MongoDB.Bson.Serialization.Attributes;
+
+using System.ComponentModel.DataAnnotations;
 
 namespace UnrealReplayServer.Databases.Models
 {
     public class SessionFile
     {
-        [BsonElement("Filename")]
+        [Required]
+        [Key]
+        public int Id { get; set; }
+
         public string Filename { get; set; }
 
-        [BsonElement("Data")]
         public byte[] Data { get; set; }
 
-        [BsonElement("StartTimeMs")]
         public int StartTimeMs { get; set; }
 
-        [BsonElement("EndTimeMs")]
         public int EndTimeMs { get; set; }
 
-        [BsonElement("ChunkIndex")]
         public int ChunkIndex { get; set; } = 0;
+
+        public virtual Session Session { get; set; }
     }
 }

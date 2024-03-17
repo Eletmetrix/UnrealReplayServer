@@ -1,15 +1,17 @@
-﻿/*
+/*
 The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
 
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnrealReplayServer.Connectors;
+using UnrealReplayServer.Controllers;
 using UnrealReplayServer.Databases.Models;
 
 namespace UnrealReplayServer.Databases
@@ -17,26 +19,13 @@ namespace UnrealReplayServer.Databases
     public class SessionDatabase : ISessionDatabase
     {
         public readonly ApplicationDefaults _applicationSettings;
-
-        private readonly MongoClient client;
-        private readonly IMongoDatabase database;
-        private readonly IMongoCollection<Session> SessionList;
-
+        private readonly DatabaseContext _context;
         private readonly int TimeoutOfLiveSession;
 
-        public string ConnectionString;
-        public string DatabaseName;
-
-        public SessionDatabase(IOptions<ApplicationDefaults> connectionString)
+        public SessionDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionString)
         {
+            _context = context;
             _applicationSettings = connectionString.Value;
-
-            ConnectionString = _applicationSettings.MongoDB.bUseEnvVariable_Connection ? Environment.GetEnvironmentVariable("MONGO_CON_URL") : _applicationSettings.MongoDB.MongoDBConnection;
-            DatabaseName = _applicationSettings.MongoDB.bUseEnvVariable_DatabaseName ? Environment.GetEnvironmentVariable("MONGO_DB_NAME") : _applicationSettings.MongoDB.MongoDBDatabaseName;
-
-            client = new MongoClient(ConnectionString);
-            database = client.GetDatabase(DatabaseName);
-            SessionList = database.GetCollection<Session>("SessionList");
 
             TimeoutOfLiveSession = _applicationSettings.TimeoutOfLiveSession * -1;
         }
@@ -44,10 +33,11 @@ namespace UnrealReplayServer.Databases
         public async Task<string> CreateSession(string setSessionName, string setAppVersion, string setNetVersion, int? setChangelist,
             string setPlatformFriendlyName)
         {
-            var values = await SessionList.Find(x => x.SessionName == setSessionName).ToListAsync();
-            if (values.Count() > 0)
+            var values = await _context.sessionList.Where(x => x.SessionName == setSessionName).ToListAsync();
+            if (values.Any())
             {
-                await SessionList.DeleteOneAsync(x => x.SessionName == setSessionName);
+                _context.sessionList.RemoveRange(values);
+                await _context.SaveChangesAsync();
             }
 
             Session newSession = new Session()
@@ -59,227 +49,240 @@ namespace UnrealReplayServer.Databases
                 SessionName = setSessionName,
                 IsLive = true
             };
-            await SessionList.InsertOneAsync(newSession);
+            _context.sessionList.Add(newSession);
+            _context.SaveChanges();
             return newSession.SessionName;
         }
 
         public async Task<Session> GetSessionByName(string sessionName)
         {
-            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count() > 0)
-            {
-                return values.Find(x => x.SessionName == sessionName);
-            }
-            return null;
+            return await _context.sessionList
+                .Where(x => x.SessionName == sessionName)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<SessionFile> GetSessionHeader(string sessionName)
         {
-            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count() > 0)
-            {
-                return values.Find(x => x.SessionName == sessionName).HeaderFile;
-            }
-            return null;
+            return await _context.sessionList
+                .Where(x => x.SessionName == sessionName)
+                .Select(x => x.HeaderFile)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<SessionFile> GetSessionChunk(string sessionName, int chunkIndex)
         {
-            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count() > 0)
-            {
-                var session = values.Find(x => x.SessionName == sessionName);
-                if (chunkIndex >= 0 && chunkIndex < session.SessionFiles.Count)
-                {
-                    return session.SessionFiles[chunkIndex];
-                }
-            }
-            return null;
+            return await _context.sessionList
+                .Where(x => x.SessionName == sessionName && chunkIndex >= 0 && chunkIndex < x.SessionFiles.Count)
+                .Select(x => x.SessionFiles.ToArray()[chunkIndex])
+                .FirstOrDefaultAsync();
         }
 
         public async Task<bool> SetUsers(string sessionName, string[] users)
         {
-            var values =  await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count() == 0)
+            var session = await _context.sessionList.Where(x => x.SessionName == sessionName).FirstOrDefaultAsync();
+            if (session != null)
             {
-                LogError($"Session {sessionName} not found");
-                return false;
+                session.Users = users;
+                await _context.SaveChangesAsync();
+
+                return true;
             }
 
-            var update = Builders<Session>.Update.Set(x => x.Users, users);
-            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
-
-            return true;
+            LogError($"Session {sessionName} not found");
+            return false;
         }
 
         public async Task<bool> SetHeader(string sessionName, SessionFile sessionFile, int streamChunkIndex, int totalDemoTimeMs)
         {
-            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count() == 0)
+            var session = await _context.sessionList.Where(x => x.SessionName == sessionName).FirstOrDefaultAsync();
+            if (session != null)
             {
-                LogError($"Session {sessionName} not found");
-                return false;
+                session.HeaderFile = sessionFile;
+                session.TotalDemoTimeMs = totalDemoTimeMs;
+
+                Log($"[HEADER] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}");
+                await _context.SaveChangesAsync();
             }
 
-            var update = Builders<Session>.Update.Set(x => x.HeaderFile, sessionFile)
-                                                 .Set(x => x.TotalDemoTimeMs, totalDemoTimeMs);
-            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
-
-            Log($"[HEADER] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}");
-
-            return true;
+            LogError($"Session {sessionName} not found");
+            return false;
         }
 
         public async Task<bool> AddChunk(string sessionName, SessionFile sessionFile, int totalDemoTimeMs, int totalChunks, int totalBytes)
         {
-            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count() == 0)
+            var session = await _context.sessionList.FirstOrDefaultAsync(x => x.SessionName == sessionName);
+
+            if (session != null)
             {
-                LogError($"Session {sessionName} not found");
-                return false;
+                session.TotalDemoTimeMs = totalDemoTimeMs;
+                session.TotalChunks = totalChunks;
+                session.TotalUploadedBytes = totalBytes;
+                session.SessionFiles.Add(sessionFile);
+
+                await _context.SaveChangesAsync();
+
+                Log($"[CHUNK] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}, TotalChunks={totalChunks}, " +
+                    $"TotalUploadedBytes={totalBytes}");
+
+                return true;
             }
 
-            var update = Builders<Session>.Update.Set(x => x.TotalDemoTimeMs, totalDemoTimeMs)
-                                                 .Set(x => x.TotalChunks, totalChunks)
-                                                 .Set(x => x.TotalUploadedBytes, totalBytes)
-                                                 .Push(x => x.SessionFiles, sessionFile);
-            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
-
-            Log($"[CHUNK] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}, TotalChunks={totalChunks}, " +
-                $"TotalUploadedBytes={totalBytes}");
-
-            return true;
+            LogError($"Session {sessionName} not found");
+            return false;
         }
 
-        public async Task StopSession(string sessionName, int totalDemoTimeMs, int totalChunks, int totalBytes)
+        public async Task UpdateSession(string sessionName, string viewerName, bool final)
         {
-            var values = await SessionList.Find(x => x.SessionName == sessionName).ToListAsync();
-            if (values.Count() == 0)
+            var session = await _context.sessionList
+                .Include(s => s.Viewers)
+                .FirstOrDefaultAsync(s => s.SessionName == sessionName);
+
+            if (final)
             {
-                LogError($"Session {sessionName} not found");
-                return;
+                // Remove viewer if final is true
+
+                var viewerToRemove = session.Viewers.FirstOrDefault(v => v.Username == viewerName);
+                if (viewerToRemove != null)
+                {
+                    session.Viewers.Remove(viewerToRemove);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            else
+            {
+                // Update "last seen" timestamp
+
+                var viewer = session.Viewers.FirstOrDefault(v => v.Username == viewerName);
+                if (viewer != null)
+                {
+                    viewer.LastSeen = DateTimeOffset.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
+        }
+
+        public async Task StartDownloading(string sessionName, string user)
+        {
+            var session = await _context.sessionList
+                .Where(x => x.SessionName == sessionName && x.Viewers.Any(v => v.Username == user))
+                .FirstOrDefaultAsync();
+
+            if (session != null)
+            {
+                var viewerToRemove = session.Viewers.FirstOrDefault(v => v.Username == user);
+                if (viewerToRemove != null)
+                {
+                    session.Viewers.Remove(viewerToRemove);
+                    await _context.SaveChangesAsync();
+                }
             }
 
-            var update = Builders<Session>.Update.Set(x => x.IsLive, false)
-                                                 .Set(x => x.TotalDemoTimeMs, totalDemoTimeMs)
-                                                 .Set(x => x.TotalChunks, totalChunks)
-                                                 .Set(x => x.TotalUploadedBytes, totalBytes);
-            await SessionList.UpdateOneAsync(x => x.SessionName == sessionName, update);
+            var sessionToEdit = await _context.sessionList
+                .Include(s => s.Viewers)
+                .FirstOrDefaultAsync(s => s.SessionName == sessionName);
 
-            await RemoveEndedLiveSessions();
+            if (session != null)
+            {
+                var newViewer = new SessionViewer { Username = user, LastSeen = DateTimeOffset.UtcNow };
+                sessionToEdit.Viewers.Add(newViewer);
+                await _context.SaveChangesAsync();
+            }
+        }
+        public async Task StopSession(string sessionName, int totalDemoTimeMs, int totalChunks, int totalBytes)
+        {
+            var session = await _context.sessionList.FirstOrDefaultAsync(x => x.SessionName == sessionName);
 
-            Log($"[END] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}, TotalChunks={totalChunks}, " +
-                $"TotalUploadedBytes={totalBytes}");
+            if (session != null)
+            {
+                session.IsLive = false;
+                session.TotalDemoTimeMs = totalDemoTimeMs;
+                session.TotalChunks = totalChunks;
+                session.TotalUploadedBytes = totalBytes;
+
+                await _context.SaveChangesAsync();
+                await RemoveEndedLiveSessions();
+
+                Log($"[END] Stats for {sessionName}: TotalDemoTimeMs={totalDemoTimeMs}, TotalChunks={totalChunks}, " +
+                    $"TotalUploadedBytes={totalBytes}");
+            }
         }
 
         public async Task<Session[]> FindReplaysByGroup(string group, IEventDatabase eventDatabase)
         {
-            return await Task.Run(async () =>
+            var sessionNames = await eventDatabase.FindSessionNamesByGroup(group);
+            if (sessionNames != null && sessionNames.Length > 0)
             {
-                var sessionNames = await eventDatabase.FindSessionNamesByGroup(group);
-                if (sessionNames == null || sessionNames.Length == 0)
-                    return Array.Empty<Session>();
+                return await _context.sessionList
+                    .Where(x => sessionNames.Contains(x.SessionName))
+                    .ToArrayAsync();
+            }
 
-                List<Session> sessions = new List<Session>();
-
-                for (int i = 0; i < sessionNames.Length; i++)
-                {
-                    var values = await SessionList.Find(x => x.SessionName == sessionNames[i]).ToListAsync();
-                    sessions.AddRange(values.FindAll(x => x.SessionName == sessionNames[i]));
-                }
-
-                return sessions.ToArray();
-            });
+            return Array.Empty<Session>();
         }
 
         public async Task<Session[]> FindReplays(string app, int? cl, string version, string meta, string user, bool? recent)
         {
-            FilterDefinition<Session> pQuery = Builders<Session>.Filter.Empty;
+            var query = _context.sessionList.AsQueryable();
+
             if (app != null)
-                pQuery &= Builders<Session>.Filter.Eq(x => x.AppVersion, app);
+                query = query.Where(x => x.AppVersion == app);
             if (cl != null)
-                pQuery &= Builders<Session>.Filter.Eq(x => x.Changelist, cl);
+                query = query.Where(x => x.Changelist == cl);
             if (version != null)
-                pQuery &= Builders<Session>.Filter.Eq(x => x.NetVersion, version);
+                query = query.Where(x => x.NetVersion == version);
             if (user != null)
-                pQuery &= Builders<Session>.Filter.AnyEq(x => x.Users, user);
+                query = query.Where(x => x.Users.Contains(user));
 
-            return await Task.Run(async () =>
-            {
-                var result = await SessionList.Find(pQuery).ToListAsync();
-
-                return result.ToArray();
-            });
+            return await query.ToArrayAsync();
         }
 
         public async Task CheckViewerInactivity()
         {
-            await Task.Run(async () =>
+            var sessions = await _context.sessionList.Include(s => s.Viewers).ToListAsync();
+            foreach (var session in sessions)
             {
-                var filter = Builders<Session>.Filter.Where(x => true);
-                var update = Builders<Session>.Update.PullFilter(x => x.Viewers, v => v.LastSeen <= DateTimeOffset.UtcNow - TimeSpan.FromSeconds(30));
-                await SessionList.UpdateManyAsync(filter, update);
-            });
+                var viewersToRemove = session.Viewers.Where(v => v.LastSeen <= DateTimeOffset.UtcNow - TimeSpan.FromSeconds(30));
+                foreach (var viewer in viewersToRemove)
+                {
+                    session.Viewers.Remove(viewer);
+                }
+            }
+
+            await _context.SaveChangesAsync();
         }
 
         public async Task CheckSessionInactivity()
         {
-            await Task.Run(async () =>
+            var controlTime = DateTimeOffset.UtcNow.AddSeconds(TimeoutOfLiveSession).ToUnixTimeMilliseconds();
+            var inactiveSessions = await _context.sessionList
+                .Where(x => x.IsLive && x.CreationDate.ToUnixTimeMilliseconds() + x.TotalDemoTimeMs < controlTime)
+                .ToListAsync();
+
+            foreach (var session in inactiveSessions)
             {
-                long controlTime = DateTimeOffset.UtcNow.AddSeconds(TimeoutOfLiveSession).ToUnixTimeMilliseconds();
-                var filter = Builders<Session>.Filter.Eq(x => x.IsLive, true);
+                session.IsLive = false;
+            }
 
-                var result = await SessionList.Find(filter).ToListAsync();
-
-                List<string> sessionNames = new List<string>();
-                for (int i = 0; i < result.Count(); i++)
-                {
-                    long elapsedTime = result[i].CreationDate.ToUnixTimeMilliseconds() + result[i].TotalDemoTimeMs;
-                    if (elapsedTime < controlTime)
-                    {
-                        sessionNames.Add(result[i].SessionName);
-                    }
-                }
-
-                var filter1 = Builders<Session>.Filter.In(x => x.SessionName, sessionNames.ToArray());
-                var update = Builders<Session>.Update.Set(x => x.IsLive, false);
-
-                await SessionList.UpdateManyAsync(filter1, update);
-
-                await RemoveEndedLiveSessions();
-            });
+            await _context.SaveChangesAsync();
+            await RemoveEndedLiveSessions();
         }
 
         public async Task RemoveEndedLiveSessions()
         {
             if (_applicationSettings.bLiveStreamMode)
             {
-                await Task.Run(async () =>
-                {
-                    var eventList = database.GetCollection<EventEntry>("EventList");
+                var controlTime = DateTimeOffset.UtcNow.AddSeconds(TimeoutOfLiveSession);
+                var sessionsToRemove = await _context.sessionList
+                    .Where(x => !x.IsLive && x.CreationDate.AddMilliseconds(x.TotalDemoTimeMs) < controlTime)
+                    .ToListAsync();
+                var eventsToRemove = await _context.eventList
+                    .Where(x => sessionsToRemove.Select(s => s.SessionName).Contains(x.SessionName))
+                    .ToListAsync();
 
-                    long controlTime = DateTimeOffset.UtcNow.AddSeconds(TimeoutOfLiveSession).ToUnixTimeMilliseconds();
-                    var filter = Builders<Session>.Filter.Eq(x => x.IsLive, false);
+                _context.eventList.RemoveRange(eventsToRemove);
+                _context.sessionList.RemoveRange(sessionsToRemove);
 
-                    var result = await SessionList.Find(filter).ToListAsync();
-
-                    var pQuery = Builders<EventEntry>.Filter.Empty;
-                    for (int i = result.Count() - 1; i >= 0; i--)
-                    {
-                        long elapsedTime = result[i].CreationDate.ToUnixTimeMilliseconds() + result[i].TotalDemoTimeMs;
-                        if (elapsedTime < controlTime)
-                        {
-                            pQuery |= Builders<EventEntry>.Filter.Eq(x => x.SessionName, result[i].SessionName);
-                        }
-                        else
-                        {
-                            result.RemoveAt(i);
-                        }
-                    }
-
-                    await eventList.DeleteManyAsync(pQuery);
-                    await SessionList.DeleteManyAsync(filter);
-                });
+                await _context.SaveChangesAsync();
             }
         }
 
@@ -287,7 +290,7 @@ namespace UnrealReplayServer.Databases
         {
             await Task.Run(async () =>
             {
-                for (;;)
+                while (true)
                 {
                     await Task.Delay(_applicationSettings.HeartbeatCheckTime);
                     await CheckViewerInactivity();

@@ -19,6 +19,8 @@ namespace UnrealReplayServer.Databases
         Task<SessionFile> GetSessionChunk(string sessionName, int chunkIndex);
         Task<bool> SetHeader(string sessionName, SessionFile sessionFile, int streamChunkIndex, int totalDemoTimeMs);
         Task<bool> SetUsers(string sessionName, string[] users);
+        Task UpdateSession(string sessionName, string viewerName, bool final);
+        Task StartDownloading(string sessionName, string user);
         Task StopSession(string sessionName, int totalDemoTimeMs, int totalChunks, int totalBytes);
         Task CheckViewerInactivity();
         Task CheckSessionInactivity();

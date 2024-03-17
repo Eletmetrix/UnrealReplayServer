@@ -3,71 +3,60 @@ The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
 
-using MongoDB.Bson;
-using MongoDB.Bson.Serialization.Attributes;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace UnrealReplayServer.Databases.Models
 {
     public class SessionViewer
     {
-        [BsonElement("Username")]
+        [Required]
+        [Key]
+        public int Id { get; set; }
+
         public string Username { get; set; } = string.Empty;
 
-        [BsonElement("LastSeen")]
         public DateTimeOffset LastSeen { get; set; } = DateTimeOffset.MinValue;
+
+        public virtual Session Session { get; set; }
     }
 
-    [BsonIgnoreExtraElements]
     public class Session
     {
-        [BsonId]
-        public ObjectId Id { get; set; }
+        [Required]
+        [Key]
+        public int Id { get; set; }
 
-        [BsonElement("IsLive")]
         public bool IsLive { get; set; } = false;
 
-        [BsonElement("SessionName")]
         public string SessionName { get; set; } = string.Empty;
 
-        [BsonElement("AppVersion")]
         public string AppVersion { get; set; } = string.Empty;
 
-        [BsonElement("NetVersion")]
         public string NetVersion { get; set; } = string.Empty;
 
-        [BsonElement("Changelist")]
         public int Changelist { get; set; } = 0;
 
-        [BsonElement("Meta")]
         public string Meta { get; set; } = string.Empty;
 
-        [BsonElement("PlatformFriendlyName")]
         public string PlatformFriendlyName { get; set; } = string.Empty;
 
-        [BsonElement("TotalDemoTimeMs")]
         public int TotalDemoTimeMs { get; set; } = 0;
 
-        [BsonElement("TotalUploadedBytes")]
         public int TotalUploadedBytes { get; set; } = 0;
 
-        [BsonElement("TotalChunks")]
         public int TotalChunks { get; set; } = 0;
 
-        [BsonElement("CreationDate")]
         public DateTimeOffset CreationDate { get; set; } = DateTimeOffset.UtcNow;
 
-        [BsonElement("Users")]
         public string[] Users { get; set; } = Array.Empty<string>();
 
-        [BsonElement("Viewers")]
-        public List<SessionViewer> Viewers { get; set; } = new List<SessionViewer>();
+        public virtual ICollection<SessionViewer> Viewers { get; set; } = new List<SessionViewer>();
 
-        [BsonElement("HeaderFile")]
         public SessionFile HeaderFile { get; set; }
 
-        [BsonElement("SessionFiles")]
-        public List<SessionFile> SessionFiles = new List<SessionFile>();
+        public virtual ICollection<SessionFile> SessionFiles { get; set; } = new List<SessionFile>();
     }
 }

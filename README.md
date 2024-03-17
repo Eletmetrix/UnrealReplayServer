@@ -1,8 +1,8 @@
 # Unreal Engine HTTP Replay Server
-This is a sample implementation of an Unreal Engine 4 HTTP Replay Streaming Sample Server using ASP.NET 5
+This is a sample implementation of an Unreal Engine 5 HTTP Replay Streaming Sample Server using ASP.NET 8
 
 ## What is HTTP Replay Streaming?
-Unreal Engine 4 allows you to record and play replays of your gaming sessions. There are various factories for this (in-memory of the Client, to file on Client, to SaveGame on Client) and the HTTP streaming server is one of them. This project implements such a 
+Unreal Engine 5 allows you to record and play replays of your gaming sessions. There are various factories for this (in-memory of the Client, to file on Client, to SaveGame on Client) and the HTTP streaming server is one of them. This project implements such a 
 server, which allows users to record their playback to a server and let other people rewatch the same replay from their own
 computer later using a shared session name.  
 
@@ -14,7 +14,7 @@ computer later using a shared session name.
 In your Unreal projects DefaultEngine.ini you have to set the HttpNetworkReplayStreaming class as the replay streaming factory and 
 set the correct ServerURL for your server.
 
-The following works for me in UE 4.26.2:
+The following works for me in UE 5.3.1:
 ```
 [NetworkReplayStreaming]
 DefaultFactoryName=HttpNetworkReplayStreaming
