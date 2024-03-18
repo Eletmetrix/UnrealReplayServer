@@ -8,21 +8,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnrealReplayServer.Databases.Models;
-using UnrealReplayServer.Connectors;
-using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 
 namespace UnrealReplayServer.Databases
 {
     public class EventDatabase : IEventDatabase
     {
-        private readonly ApplicationDefaults _applicationSettings;
         private readonly DatabaseContext _context;
 
-        public EventDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionStrings)
+        public EventDatabase(DatabaseContext context)
         {
             _context = context;
-            _applicationSettings = connectionStrings.Value;
         }
 
         public async Task AddEvent(string setSessionName, string group, int? time1, int? time2, string meta, bool? incrementSize, byte[] data)

@@ -3,7 +3,6 @@ The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
 
-
 using System.ComponentModel.DataAnnotations;
 
 namespace UnrealReplayServer.Databases.Models

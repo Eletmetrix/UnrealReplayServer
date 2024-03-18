@@ -3,28 +3,28 @@ The MIT License (MIT)
 Copyright (c) 2021 Henning Thoele
 */
 
-using System;
 using System.Linq;
-using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.Extensions.Options;
-using UnrealReplayServer.Connectors;
 
 namespace UnrealReplayServer.Web
 {
     public class UserAgentActionFilterAttribute : ActionFilterAttribute
     {
-        private readonly ApplicationDefaults _applicationDefaults;
+        private readonly DatabaseContext _context;
+        private readonly bool bUseUserAgentFilter;
+        private readonly string[] AllowedUserAgents;
 
-        public UserAgentActionFilterAttribute(IOptions<ApplicationDefaults> options)
+        public UserAgentActionFilterAttribute(DatabaseContext context)
         {
-            _applicationDefaults = options.Value;
+            _context = context;
+            bUseUserAgentFilter = _context.applicationSettings.FirstOrDefault().bUseUserAgentFilter;
+            AllowedUserAgents = _context.applicationSettings.FirstOrDefault().AllowedUserAgents;
         }
 
         public override void OnActionExecuting(ActionExecutingContext context)
         {
-            if (!_applicationDefaults.UserAgentDetails.bUseUserAgentFilter) 
+            if (!bUseUserAgentFilter) 
             {
                 base.OnActionExecuting(context);
                 return;
@@ -35,7 +35,7 @@ namespace UnrealReplayServer.Web
                 string RequestedUserAgent = context.HttpContext.Request.Headers["User-Agent"].ToString();
 
                 // You can change StartsWith if you want.
-                if (_applicationDefaults.UserAgentDetails.AllowedUserAgents.Any(RequestedUserAgent.StartsWith))
+                if (AllowedUserAgents.Any(RequestedUserAgent.StartsWith))
                 {
                     base.OnActionExecuting(context);
                     return;

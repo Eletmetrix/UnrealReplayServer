@@ -10,7 +10,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Threading.Tasks;
 using UnrealReplayServer.Databases;
-using UnrealReplayServer.Connectors;
 using Microsoft.EntityFrameworkCore;
 using System;
 
@@ -33,10 +32,9 @@ namespace UnrealReplayServer
                 options.OutputFormatters.Insert(0, new BinaryOutputFormatter());
             });
             services.AddOptions();
-            services.Configure<ApplicationDefaults>(Configuration.GetSection("ApplicationDefaults"));
 
-            var useEnvVariableConnection = Configuration.GetValue<bool>("ApplicationDefaults:MySql:bUseEnvVariable_Connection");
-            string connectionString = useEnvVariableConnection ? Environment.GetEnvironmentVariable("DB_CON_URL") : Configuration.GetValue<string>("ApplicationDefaults:MySql:ConnectionString");
+            string envConnString = Environment.GetEnvironmentVariable("DB_CON_URL");
+            string connectionString = !string.IsNullOrEmpty(envConnString) ? envConnString : Configuration.GetValue<string>("ApplicationDefaults:ConnectionString");
 
             services.AddDbContextPool<DatabaseContext>(
                 options => options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))

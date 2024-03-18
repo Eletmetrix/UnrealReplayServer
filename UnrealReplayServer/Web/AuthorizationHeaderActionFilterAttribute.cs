@@ -1,27 +1,29 @@
-﻿using Microsoft.AspNetCore.Mvc.Filters;
+﻿/*
+The MIT License (MIT)
+Copyright (c) 2021 Henning Thoele
+*/
+
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using System;
 using System.Linq;
-using UnrealReplayServer.Connectors;
-using UnrealReplayServer.Databases.Models;
 
 namespace UnrealReplayServer.Web
 {
     public class AuthorizationHeaderActionFilterAttribute : ActionFilterAttribute
     {
-        private readonly ApplicationDefaults _applicationDefaults;
         private readonly DatabaseContext _context;
+        private readonly bool bUseAuthorizationHeader;
 
-        public AuthorizationHeaderActionFilterAttribute(DatabaseContext context, IOptions<ApplicationDefaults> options)
+        public AuthorizationHeaderActionFilterAttribute(DatabaseContext context)
         {
-            _applicationDefaults = options.Value;
             _context = context;
+
+            bUseAuthorizationHeader = _context.applicationSettings.FirstOrDefault().bUseAuthorizationHeader;
         }
 
         public override async void OnActionExecuting(ActionExecutingContext context)
         {
-            if (!_applicationDefaults.bUseAuthorizationHeader)
+            if (!bUseAuthorizationHeader)
             {
                 base.OnActionExecuting(context);
                 return;
