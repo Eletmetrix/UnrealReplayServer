@@ -23,21 +23,23 @@ namespace UnrealReplayServer.Controllers
     public class ReplayController : ControllerBase
     {
         private readonly ILogger<ReplayController> _logger;
+        private readonly DatabaseContext _context;
 
         private ISessionDatabase sessionDatabase = null;
         private IEventDatabase eventDatabase = null;
         private string AuthorizationHeaderValue = "";
         private bool bUseAuthorizationHeader = false;
 
-        public ReplayController(ILogger<ReplayController> logger, ISessionDatabase setSessionDatabase, IEventDatabase setEventDatabase)
+        public ReplayController(ILogger<ReplayController> logger, DatabaseContext context, ISessionDatabase setSessionDatabase, IEventDatabase setEventDatabase)
         {
             _logger = logger;
+            _context = context;
 
             sessionDatabase = setSessionDatabase;
             eventDatabase = setEventDatabase;
 
-            AuthorizationHeaderValue = ((SessionDatabase)sessionDatabase)._applicationSettings.AuthorizationHeaderValue;
-            bUseAuthorizationHeader = ((SessionDatabase)sessionDatabase)._applicationSettings.bUseAuthorizationHeader;
+            AuthorizationHeaderValue = _context.applicationSettings.FirstOrDefault().AuthorizationHeaderValue;
+            bUseAuthorizationHeader = _context.applicationSettings.FirstOrDefault().bUseAuthorizationHeader;
         }
 
         #region Uploading

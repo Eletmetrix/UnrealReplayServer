@@ -4,30 +4,28 @@ Copyright (c) 2021 Henning Thoele
 */
 
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using UnrealReplayServer.Connectors;
-using UnrealReplayServer.Controllers;
 using UnrealReplayServer.Databases.Models;
 
 namespace UnrealReplayServer.Databases
 {
     public class SessionDatabase : ISessionDatabase
     {
-        public readonly ApplicationDefaults _applicationSettings;
         private readonly DatabaseContext _context;
         private readonly int TimeoutOfLiveSession;
+        private readonly int HeartbeatCheckTime;
+        private readonly bool bLiveStreamMode;
 
-        public SessionDatabase(DatabaseContext context, IOptions<ApplicationDefaults> connectionString)
+        public SessionDatabase(DatabaseContext context)
         {
             _context = context;
-            _applicationSettings = connectionString.Value;
 
-            TimeoutOfLiveSession = _applicationSettings.TimeoutOfLiveSession * -1;
+            TimeoutOfLiveSession = _context.applicationSettings.FirstOrDefault().TimeoutOfLiveSession * -1;
+            HeartbeatCheckTime = _context.applicationSettings.FirstOrDefault().HeartbeatCheckTime;
+            bLiveStreamMode = _context.applicationSettings.FirstOrDefault().bLiveStreamMode;
         }
 
         public async Task<string> CreateSession(string setSessionName, string setAppVersion, string setNetVersion, int? setChangelist,
@@ -269,7 +267,7 @@ namespace UnrealReplayServer.Databases
 
         public async Task RemoveEndedLiveSessions()
         {
-            if (_applicationSettings.bLiveStreamMode)
+            if (bLiveStreamMode)
             {
                 var controlTime = DateTimeOffset.UtcNow.AddSeconds(TimeoutOfLiveSession);
                 var sessionsToRemove = await _context.sessionList
@@ -292,7 +290,7 @@ namespace UnrealReplayServer.Databases
             {
                 while (true)
                 {
-                    await Task.Delay(_applicationSettings.HeartbeatCheckTime);
+                    await Task.Delay(HeartbeatCheckTime);
                     await CheckViewerInactivity();
                     await CheckSessionInactivity();
                     await RemoveEndedLiveSessions();

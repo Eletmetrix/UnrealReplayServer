@@ -4,10 +4,6 @@ Copyright (c) 2021 Henning Thoele
 */
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
 namespace UnrealReplayServer.Models
 {
