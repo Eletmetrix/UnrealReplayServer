@@ -38,8 +38,8 @@ namespace UnrealReplayServer.Controllers
             sessionDatabase = setSessionDatabase;
             eventDatabase = setEventDatabase;
 
-            AuthorizationHeaderValue = _context.applicationSettings.FirstOrDefault().AuthorizationHeaderValue;
-            bUseAuthorizationHeader = _context.applicationSettings.FirstOrDefault().bUseAuthorizationHeader;
+            AuthorizationHeaderValue = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().AuthorizationHeaderValue;
+            bUseAuthorizationHeader = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().bUseAuthorizationHeader;
         }
 
         #region Uploading

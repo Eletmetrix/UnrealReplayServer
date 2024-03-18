@@ -11,7 +11,7 @@ namespace UnrealReplayServer.Databases.Models
     {
         [Required]
         [Key]
-        public int Id { get; set; }
+        public int Id { get; set; } = 1;
 
 
         // Remove all live sessions after they are ended.

@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using UnrealReplayServer.Databases;
 using Microsoft.EntityFrameworkCore;
 using System;
+using UnrealReplayServer.Databases.Models;
 
 namespace UnrealReplayServer
 {

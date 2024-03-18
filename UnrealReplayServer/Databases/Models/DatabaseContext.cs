@@ -25,7 +25,14 @@ public class DatabaseContext : DbContext
         modelBuilder.Entity<Session>().HasKey(x => x.Id);
         modelBuilder.Entity<EventEntry>().HasKey(x => x.Id);
         modelBuilder.Entity<AuthorizationHeader>().HasKey(x => x.Id);
-        modelBuilder.Entity<ApplicationSettings>().HasKey(x => x.Id);
+
+        modelBuilder.Entity<ApplicationSettings>(x =>
+        {
+            x.HasKey(x => x.Id);
+            x.HasData(
+                new ApplicationSettings { }
+            );
+        });
 
         modelBuilder.Entity<SessionFile>(x =>
         {
