@@ -11,12 +11,20 @@ namespace UnrealReplayServer.Web
 {
     public class UserAgentActionFilterAttribute : ActionFilterAttribute
     {
-        public UserAgentActionFilterAttribute()
-        { }
+        private readonly DatabaseContext _context;
+        private readonly bool bUseUserAgentFilter;
+        private readonly string[] AllowedUserAgents;
+
+        public UserAgentActionFilterAttribute(DatabaseContext context)
+        {
+            _context = context;
+            bUseUserAgentFilter = _context.applicationSettings.FirstOrDefault().bUseUserAgentFilter;
+            AllowedUserAgents = _context.applicationSettings.FirstOrDefault().AllowedUserAgents;
+        }
 
         public override void OnActionExecuting(ActionExecutingContext context)
         {
-            if (!_applicationDefaults.UserAgentDetails.bUseUserAgentFilter) 
+            if (!bUseUserAgentFilter) 
             {
                 base.OnActionExecuting(context);
                 return;
@@ -27,7 +35,7 @@ namespace UnrealReplayServer.Web
                 string RequestedUserAgent = context.HttpContext.Request.Headers["User-Agent"].ToString();
 
                 // You can change StartsWith if you want.
-                if (_applicationDefaults.UserAgentDetails.AllowedUserAgents.Any(RequestedUserAgent.StartsWith))
+                if (AllowedUserAgents.Any(RequestedUserAgent.StartsWith))
                 {
                     base.OnActionExecuting(context);
                     return;

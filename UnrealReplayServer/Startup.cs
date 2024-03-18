@@ -33,8 +33,8 @@ namespace UnrealReplayServer
             });
             services.AddOptions();
 
-            bool useEnvVariableConnection = Environment.GetEnvironmentVariable("DB_CON_URL") != "" ? true : false;
-            string connectionString = useEnvVariableConnection ? Environment.GetEnvironmentVariable("DB_CON_URL") : Configuration.GetValue<string>("ApplicationDefaults:ConnectionString");
+            string envConnString = Environment.GetEnvironmentVariable("DB_CON_URL");
+            string connectionString = !string.IsNullOrEmpty(envConnString) ? envConnString : Configuration.GetValue<string>("ApplicationDefaults:ConnectionString");
 
             services.AddDbContextPool<DatabaseContext>(
                 options => options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))

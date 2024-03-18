@@ -12,15 +12,18 @@ namespace UnrealReplayServer.Web
     public class AuthorizationHeaderActionFilterAttribute : ActionFilterAttribute
     {
         private readonly DatabaseContext _context;
+        private readonly bool bUseAuthorizationHeader;
 
         public AuthorizationHeaderActionFilterAttribute(DatabaseContext context)
         {
             _context = context;
+
+            bUseAuthorizationHeader = _context.applicationSettings.FirstOrDefault().bUseAuthorizationHeader;
         }
 
         public override async void OnActionExecuting(ActionExecutingContext context)
         {
-            if (!_applicationDefaults.bUseAuthorizationHeader)
+            if (!bUseAuthorizationHeader)
             {
                 base.OnActionExecuting(context);
                 return;
