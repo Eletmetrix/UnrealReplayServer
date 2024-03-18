@@ -18,8 +18,8 @@ namespace UnrealReplayServer.Web
         public UserAgentActionFilterAttribute(DatabaseContext context)
         {
             _context = context;
-            bUseUserAgentFilter = _context.applicationSettings.FirstOrDefault().bUseUserAgentFilter;
-            AllowedUserAgents = _context.applicationSettings.FirstOrDefault().AllowedUserAgents;
+            bUseUserAgentFilter = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().bUseUserAgentFilter;
+            AllowedUserAgents = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().AllowedUserAgents;
         }
 
         public override void OnActionExecuting(ActionExecutingContext context)

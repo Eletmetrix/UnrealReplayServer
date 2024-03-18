@@ -23,9 +23,9 @@ namespace UnrealReplayServer.Databases
         {
             _context = context;
 
-            TimeoutOfLiveSession = _context.applicationSettings.FirstOrDefault().TimeoutOfLiveSession * -1;
-            HeartbeatCheckTime = _context.applicationSettings.FirstOrDefault().HeartbeatCheckTime;
-            bLiveStreamMode = _context.applicationSettings.FirstOrDefault().bLiveStreamMode;
+            TimeoutOfLiveSession = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().TimeoutOfLiveSession * -1;
+            HeartbeatCheckTime = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().HeartbeatCheckTime;
+            bLiveStreamMode = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().bLiveStreamMode;
         }
 
         public async Task<string> CreateSession(string setSessionName, string setAppVersion, string setNetVersion, int? setChangelist,

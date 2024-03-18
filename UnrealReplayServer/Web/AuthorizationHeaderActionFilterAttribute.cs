@@ -18,7 +18,7 @@ namespace UnrealReplayServer.Web
         {
             _context = context;
 
-            bUseAuthorizationHeader = _context.applicationSettings.FirstOrDefault().bUseAuthorizationHeader;
+            bUseAuthorizationHeader = _context.applicationSettings.Where(x => x.Id == 1).FirstOrDefault().bUseAuthorizationHeader;
         }
 
         public override async void OnActionExecuting(ActionExecutingContext context)
